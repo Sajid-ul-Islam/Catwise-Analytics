@@ -1,3 +1,4 @@
+from pandas.errors import ClosedFileError
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -16,12 +17,13 @@ os.makedirs(FEEDBACK_DIR, exist_ok=True)
 CATEGORY_MAPPING = {
     'Boxer': ['boxer'],
     'Tank Top': ['tank top', 'tanktop', 'tank', 'top'],
+    'Cuban': ['cuban'],
+    'Panjabi': ['panjabi', 'punjabi'],
     'Jeans': ['jeans'],
     'Formal Shirt':['executive', 'formal'],
     'Denim Shirt': ['denim'],
     'Flannel Shirt': ['flannel'],
     'Polo Shirt': ['polo'],
-    'Panjabi': ['panjabi', 'punjabi'],
     'Trousers': ['trousers', 'pant', 'cargo', 'trouser', 'joggers', 'track pant', 'jogger'],
     'Twill Chino': ['twill chino'],
     'Mask': ['mask'],
