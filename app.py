@@ -20,7 +20,7 @@ CATEGORY_MAPPING = {
     'Cuban': ['cuban'],
     'Panjabi': ['panjabi', 'punjabi'],
     'Jeans': ['jeans'],
-    'Formal Shirt':['executive', 'formal'],
+    'Formal Shirt':['executive formal'],
     'Denim Shirt': ['denim'],
     'Flannel Shirt': ['flannel'],
     'Polo Shirt': ['polo'],
