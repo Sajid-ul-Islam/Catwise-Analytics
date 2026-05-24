@@ -17,7 +17,7 @@ os.makedirs(FEEDBACK_DIR, exist_ok=True)
 CATEGORY_MAPPING = {
     'Boxer': ['boxer'],
     'Tank Top': ['tank top', 'tanktop', 'tank', 'top'],
-    'Cuban': ['cuban shirt'],
+    'Cuban Shirt': ['Cuban Collar Shirt'],
     'Panjabi': ['panjabi', 'punjabi'],
     'Jeans': ['jeans'],
     'Formal Shirt':['executive', 'formal'],
