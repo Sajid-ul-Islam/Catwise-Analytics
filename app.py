@@ -441,7 +441,8 @@ def process_analytics(df, mapping):
     
     # 1. Clean Data (Handle commas, currency symbols, and whitespace)
     df['Clean_Name'] = df[mapping['name']].fillna('Unknown').astype(str)
-    df = df[~df['Clean_Name'].str.contains('Choose Any', case=False, na=False)]
+    exclude_keywords = 'choose any|shoose any|combo|bundle|bundel'
+    df = df[~df['Clean_Name'].str.contains(exclude_keywords, case=False, na=False)]
 
     def clean_numeric(val):
         if pd.isna(val): return 0
