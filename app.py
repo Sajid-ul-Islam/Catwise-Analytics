@@ -24,6 +24,7 @@ CATEGORY_MAPPING = {
     'Denim Shirt': ['denim shirt'],
     'Flannel Shirt': ['flannel'],
     'Polo Shirt': ['polo'],
+    'Cargo Trousers': ['cargo', 'cargo trousers'],
     'Trousers': ['trousers', 'pant', 'trcargo', 'trouser', 'joggers', 'track pant', 'jogger'],
     'Twill Chino': ['twill chino'],
     'Mask': ['mask'],
