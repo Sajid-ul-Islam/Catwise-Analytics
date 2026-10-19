@@ -409,31 +409,104 @@ def get_product_category(name):
     return 'Others'
 
 def find_columns(df):
-    """Auto-detects columns from dataframe."""
-    mapping = {
-        'name': ['item name', 'product name', 'product', 'item', 'title', 'description', 'name'],
-        'cost': ['item cost', 'price', 'unit price', 'cost', 'rate', 'mrp', 'selling price'],
-        'qty': ['quantity', 'qty', 'units', 'sold', 'count', 'total quantity'],
-        'date': ['date', 'order date', 'month', 'time', 'created at'],
-        'order_id': ['order id', 'order #', 'invoice number', 'invoice #', 'order number', 'transaction id', 'id'],
-        'phone': ['phone', 'contact', 'mobile', 'cell', 'phone number', 'customer phone']
+    """Auto-detects columns from dataframe with dynamic and flexible matching."""
+    # Enhanced column type definitions with priority-based matching
+    column_types = {
+        'name': {
+            'aliases': ['item name', 'product name', 'product', 'item', 'title', 'description', 'name', 'product title', 'item title'],
+            'keywords': ['name', 'product', 'item', 'title', 'desc'],
+            'priority': 1
+        },
+        'cost': {
+            'aliases': ['item cost', 'price', 'unit price', 'cost', 'rate', 'mrp', 'selling price', 'amount', 'unit cost', 'sell price'],
+            'keywords': ['price', 'cost', 'rate', 'mrp', 'amount', 'sell', 'value', 'unit'],
+            'priority': 1
+        },
+        'qty': {
+            'aliases': ['quantity', 'qty', 'units', 'sold', 'count', 'total quantity', 'item quantity', 'product quantity'],
+            'keywords': ['quantity', 'qty', 'unit', 'sold', 'count', 'pcs', 'piece'],
+            'priority': 1
+        },
+        'date': {
+            'aliases': ['date', 'order date', 'month', 'time', 'created at', 'order time', 'purchase date'],
+            'keywords': ['date', 'time', 'month', 'year', 'day', 'created', 'purchase', 'order date'],
+            'priority': 2
+        },
+        'order_id': {
+            'aliases': ['order id', 'order #', 'invoice number', 'invoice #', 'order number', 'transaction id', 'id', 'invoice', 'order no'],
+            'keywords': ['order', 'invoice', 'transaction', 'id', '#', 'no', 'number'],
+            'priority': 2
+        },
+        'phone': {
+            'aliases': ['phone', 'contact', 'mobile', 'cell', 'phone number', 'customer phone', 'customer contact'],
+            'keywords': ['phone', 'contact', 'mobile', 'cell', 'customer', 'call'],
+            'priority': 2
+        }
     }
+    
     found = {}
     actual_cols = list(df.columns)
     lower_cols = [str(c).strip().lower() for c in actual_cols]
+    used_indices = set()
     
-    for key, aliases in mapping.items():
-        # Exact match
+    # Sort by priority for better matching order
+    sorted_types = sorted(column_types.items(), key=lambda x: x[1]['priority'])
+    
+    for key, config in sorted_types:
+        aliases = config['aliases']
+        keywords = config['keywords']
+        
+        # First pass: exact match with aliases
         for alias in aliases:
             if alias in lower_cols:
-                found[key] = actual_cols[lower_cols.index(alias)]
-                break
-        # Partial match
+                idx = lower_cols.index(alias)
+                if idx not in used_indices:
+                    found[key] = actual_cols[idx]
+                    used_indices.add(idx)
+                    break
+        
+        # Second pass: partial match with aliases
         if key not in found:
             for i, col in enumerate(lower_cols):
-                if any(alias in col for alias in aliases):
-                    found[key] = actual_cols[i]
-                    break
+                if i not in used_indices:
+                    if any(alias.lower() in col for alias in aliases):
+                        found[key] = actual_cols[i]
+                        used_indices.add(i)
+                        break
+        
+        # Third pass: keyword-based matching
+        if key not in found:
+            for i, col in enumerate(lower_cols):
+                if i not in used_indices:
+                    if any(kw.lower() in col for kw in keywords):
+                        found[key] = actual_cols[i]
+                        used_indices.add(i)
+                        break
+    
+    # For any remaining columns not matched, try to intelligently guess
+    for i, col in enumerate(lower_cols):
+        if i not in used_indices:
+            col_name = actual_cols[i]
+            # Check if it contains numeric data (likely cost, qty, or order_id)
+            try:
+                sample_data = df[col_name].dropna().head(10)
+                if all(isinstance(x, (int, float)) or (isinstance(x, str) and any(c.isdigit() for c in str(x))) for x in sample_data):
+                    # Could be cost, qty, or order_id
+                    if any(kw in col for kw in ['price', 'cost', 'rate', 'amount']):
+                        if 'cost' not in found:
+                            found['cost'] = col_name
+                            used_indices.add(i)
+                    elif any(kw in col for kw in ['qty', 'quantity', 'unit', 'pcs']):
+                        if 'qty' not in found:
+                            found['qty'] = col_name
+                            used_indices.add(i)
+                    elif any(kw in col for kw in ['order', 'invoice', 'id']):
+                        if 'order_id' not in found:
+                            found['order_id'] = col_name
+                            used_indices.add(i)
+            except:
+                pass
+    
     return found
 
 def process_analytics(df, mapping):
@@ -575,17 +648,35 @@ def main():
             is_mapped = all(k in auto_cols for k in mandatory_keys)
             
             st.subheader("🛠️ Verify Column Mapping")
+            
+            # Show auto-detection status
+            if is_mapped:
+                st.success("✅ Auto-detected columns: " + ", ".join([f"**{k}**: `{auto_cols[k]}`" for k in mandatory_keys if k in auto_cols]))
+            else:
+                st.warning("⚠️ Some required columns not auto-detected. Please manually select below.")
+            
             mc1, mc2, mc3, mc4, mc5, mc6 = st.columns(6)
             
             def get_idx(key):
                 return all_cols.index(auto_cols[key]) if key in auto_cols else 0
+            
+            def get_optional_idx(key):
+                if key in auto_cols:
+                    return all_cols.index(auto_cols[key]) + 1
+                return 0
 
             m_name = mc1.selectbox("Product Name", all_cols, index=get_idx('name'))
             m_cost = mc2.selectbox("Price", all_cols, index=get_idx('cost'))
             m_qty = mc3.selectbox("Quantity", all_cols, index=get_idx('qty'))
-            m_date = mc4.selectbox("Date (Opt)", ["None"] + all_cols, index=get_idx('date')+1 if 'date' in auto_cols else 0)
-            m_order = mc5.selectbox("Order ID (Opt)", ["None"] + all_cols, index=get_idx('order_id')+1 if 'order_id' in auto_cols else 0)
-            m_phone = mc6.selectbox("Phone (Opt)", ["None"] + all_cols, index=get_idx('phone')+1 if 'phone' in auto_cols else 0)
+            m_date = mc4.selectbox("Date (Opt)", ["None"] + all_cols, index=get_optional_idx('date'))
+            m_order = mc5.selectbox("Order ID (Opt)", ["None"] + all_cols, index=get_optional_idx('order_id'))
+            m_phone = mc6.selectbox("Phone (Opt)", ["None"] + all_cols, index=get_optional_idx('phone'))
+            
+            # Show unmatched columns info
+            matched_cols = set(auto_cols.values())
+            unmatched = [c for c in all_cols if c not in matched_cols]
+            if unmatched and len(unmatched) <= 5:
+                st.info(f"Unmapped columns: {', '.join(unmatched)}")
             
             mapping = {
                 'name': m_name, 'cost': m_cost, 'qty': m_qty,
