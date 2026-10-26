@@ -49,6 +49,35 @@ CATEGORY_MAPPING = {
     'Knit Cap': ['knit cap'],
 }
 
+# Bright, vibrant qualitative color palette for high-contrast synchronized chart visuals
+CATEGORY_PALETTE = list(dict.fromkeys(
+    px.colors.qualitative.Plotly +
+    px.colors.qualitative.Vivid +
+    px.colors.qualitative.Bold +
+    px.colors.qualitative.D3 +
+    px.colors.qualitative.Set1 +
+    px.colors.qualitative.Dark24
+))
+
+ALL_KNOWN_CATEGORIES = list(CATEGORY_MAPPING.keys()) + [
+    'FS T-Shirt', 'T-Shirt', 'FS Shirt', 'HS Shirt', 'Others', 'Unknown'
+]
+
+CATEGORY_COLOR_MAP = {
+    cat: CATEGORY_PALETTE[i % len(CATEGORY_PALETTE)] for i, cat in enumerate(ALL_KNOWN_CATEGORIES)
+}
+
+def get_category_color_map(categories):
+    """Returns a synchronized category-to-color mapping ensuring identical colors across charts."""
+    color_map = {}
+    extra_idx = len(ALL_KNOWN_CATEGORIES)
+    for cat in categories:
+        if cat in CATEGORY_COLOR_MAP:
+            color_map[cat] = CATEGORY_COLOR_MAP[cat]
+        else:
+            color_map[cat] = CATEGORY_PALETTE[extra_idx % len(CATEGORY_PALETTE)]
+            extra_idx += 1
+    return color_map
 
 LOGO_PNG = "assets/deen_logo.png"
 
@@ -626,15 +655,21 @@ def main():
                 # Visuals
                 v1, v2 = st.columns(2)
                 
-                # Sort once for consistent color sequence
+                # Sort revenue for pie chart and quantity for bar chart (big to small)
                 summ_sorted = results['summary'].sort_values('Total Amount', ascending=False)
-                color_seq = px.colors.qualitative.Pastel
+                summ_qty_sorted = results['summary'].sort_values('Total Qty', ascending=False)
                 
-                v1.plotly_chart(px.pie(summ_sorted, values='Total Amount', names='Category', hole=0.5, 
-                                       title='Revenue by Category', color_discrete_sequence=color_seq), use_container_width=True)
+                # Synchronized color map so each category has the exact same color in both charts
+                cat_color_map = get_category_color_map(results['summary']['Category'].unique())
                 
-                v2.plotly_chart(px.bar(summ_sorted, x='Category', y='Total Qty', color='Category', 
-                                       title='Volume by Category', color_discrete_sequence=color_seq), use_container_width=True)
+                v1.plotly_chart(px.pie(summ_sorted, values='Total Amount', names='Category', color='Category', hole=0.5, 
+                                       title='Revenue by Category', color_discrete_map=cat_color_map), use_container_width=True)
+                
+                fig_bar = px.bar(summ_qty_sorted, x='Category', y='Total Qty', color='Category', 
+                                 title='Volume by Category', color_discrete_map=cat_color_map)
+                fig_bar.update_layout(xaxis={'categoryorder': 'total descending'})
+                
+                v2.plotly_chart(fig_bar, use_container_width=True)
                 
                 # Data Tables
                 t1, t2, t3 = st.tabs(["📊 Category Summary", "💰 Price-wise Category", "📦 Category-wise Product"])
