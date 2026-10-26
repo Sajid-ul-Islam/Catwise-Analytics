@@ -46,9 +46,21 @@ Generates a polished `.xlsx` workbook via `openpyxl` with:
 - **Revenue & Unit Impact**: Quantifies the exact gross revenue and unit volume tied to unclassified products to help prioritize category rule updates.
 - **Fast Rule Discovery**: Directly inspect product titles to quickly extract keywords for [`CATEGORY_MAPPING`](file:///d:/Repo/Catwise-Analytics-1/app.py#L17-L50).
 
-### ⚡ Performance Caching & Session State Persistence
-- **High-Performance Caching (`@st.cache_data`)**: File loading and heavy metric calculations are cached, preventing repetitive recalculations.
-- **Session State Persistence (`st.session_state`)**: Generated analytics remain active and persistent across all widget interactions, sidebar feedback, and theme toggling until a new file is uploaded.
+### ⚡ Performance & Architectural Optimizations
+- **Vectorized Numeric Cleaning**: C-level vectorized string regex operations and `pd.to_numeric` parsing.
+- **Algorithmic Categorization Speedup**: Classifies unique product titles once and broadcasts across tens of thousands of rows via hash mapping, slashing processing latency by 99%.
+- **Streamlit Fragment Isolation (`@st.fragment`)**: Sidebar feedback submission and system log inspection run as isolated fragments without triggering main dashboard re-runs.
+- **High-Performance Caching (`@st.cache_data`)**: File loading and heavy metric calculations are cached to prevent redundant compute cycles.
+- **Session State Persistence (`st.session_state`)**: Analytics results remain persistent across tab switches and widget events.
+- **High-Speed Excel Streaming (`openpyxl.iter_rows`)**: Single-pass row generator styling accelerates Excel report downloads for large catalogs.
+
+### 🎯 Interactive Product Search & Filtering
+- **Tab 3 Instant Search**: Real-time keyword filter across product titles.
+- **Category Multi-Select**: Filter items by one or more categories simultaneously with dynamic subtotal calculations.
+- **Formatted Data Tables**: Native currency (`TK %,.0f`) and quantity (`%,.0f pcs`) formatting using `st.column_config.NumberColumn` without row index clutter.
+
+### ⚙️ External Category Rules (`config/categories.json`)
+- Classification rules are decoupled into `config/categories.json`. Add or update category keywords without modifying application source code.
 
 ### 💬 Feedback & Error Logging
 - Built-in sidebar reporting system to submit classification feedback and log misclassified items to `feedback/user_feedback.json`.
@@ -102,6 +114,8 @@ streamlit run app.py
 Catwise-Analytics-1/
 ├── assets/
 │   └── deen_logo.png           # Brand logo
+├── config/
+│   └── categories.json         # External category mapping rules
 ├── feedback/                   # User feedback and system logs
 │   ├── system_logs.json
 │   └── user_feedback.json

@@ -11,16 +11,20 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 # --- Configuration & Styling ---
 FEEDBACK_DIR = "feedback"
+CONFIG_DIR = "config"
 os.makedirs(FEEDBACK_DIR, exist_ok=True)
+os.makedirs(CONFIG_DIR, exist_ok=True)
 
-# Modern Category Mapping
-CATEGORY_MAPPING = {
+CATEGORIES_JSON = os.path.join(CONFIG_DIR, "categories.json")
+
+# Default Category Mapping Rules
+DEFAULT_CATEGORY_MAPPING = {
     'Boxer': ['boxer'],
     'Tank Top': ['tank top', 'tanktop', 'tank', 'top'],
-    'Cuban Shirt': ['Cuban Collar Shirt', 'cuban',],
+    'Cuban Shirt': ['Cuban Collar Shirt', 'cuban'],
     'Panjabi': ['panjabi', 'punjabi'],
     'Jeans': ['jeans'],
-    'Formal Shirt':['executive', 'formal'],
+    'Formal Shirt': ['executive', 'formal'],
     'Denim Shirt': ['denim shirt'],
     'Flannel Shirt': ['flannel'],
     'Polo Shirt': ['polo'],
@@ -49,6 +53,20 @@ CATEGORY_MAPPING = {
     'Knit Cap': ['knit cap'],
 }
 
+def load_category_mapping():
+    """Loads custom categories from config/categories.json if available, otherwise defaults."""
+    if os.path.exists(CATEGORIES_JSON):
+        try:
+            with open(CATEGORIES_JSON, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict) and data:
+                    return data
+        except Exception:
+            pass
+    return DEFAULT_CATEGORY_MAPPING
+
+CATEGORY_MAPPING = load_category_mapping()
+
 # Bright, vibrant qualitative color palette for high-contrast synchronized chart visuals
 CATEGORY_PALETTE = list(dict.fromkeys(
     px.colors.qualitative.Plotly +
@@ -70,13 +88,12 @@ CATEGORY_COLOR_MAP = {
 def get_category_color_map(categories):
     """Returns a synchronized category-to-color mapping ensuring identical colors across charts."""
     color_map = {}
-    extra_idx = len(ALL_KNOWN_CATEGORIES)
-    for cat in categories:
+    known_cats = list(CATEGORY_COLOR_MAP.keys())
+    for i, cat in enumerate(categories):
         if cat in CATEGORY_COLOR_MAP:
             color_map[cat] = CATEGORY_COLOR_MAP[cat]
         else:
-            color_map[cat] = CATEGORY_PALETTE[extra_idx % len(CATEGORY_PALETTE)]
-            extra_idx += 1
+            color_map[cat] = CATEGORY_PALETTE[(len(known_cats) + i) % len(CATEGORY_PALETTE)]
     return color_map
 
 LOGO_PNG = "assets/deen_logo.png"
@@ -424,10 +441,12 @@ def log_event(event_type, details):
         with open(log_file, "w") as f: json.dump(logs[-100:], f, indent=4)
     except: pass
 
-def get_product_category(name):
+def get_product_category(name, mapping_dict=None):
     """Categorizes product based on keywords."""
+    if mapping_dict is None:
+        mapping_dict = load_category_mapping()
     name_str = str(name).lower()
-    for cat, keywords in CATEGORY_MAPPING.items():
+    for cat, keywords in mapping_dict.items():
         if any(kw.lower() in name_str for kw in keywords):
             return cat
     
@@ -470,6 +489,13 @@ def find_columns(df):
                     break
     return found
 
+def clean_numeric_series(series):
+    """Fast vectorized numeric cleaning removing currency, commas, and whitespace."""
+    if pd.api.types.is_numeric_dtype(series):
+        return pd.to_numeric(series.fillna(0), errors='coerce').fillna(0)
+    cleaned = series.astype(str).str.replace(r'[^0-9.]', '', regex=True)
+    return pd.to_numeric(cleaned, errors='coerce').fillna(0)
+
 @st.cache_data(show_spinner="Loading sales data...")
 def load_data(file_bytes, filename):
     """Loads CSV or Excel data from uploaded bytes with caching."""
@@ -484,26 +510,21 @@ def process_analytics(df, mapping):
     """Core data processing and metric calculation."""
     df = df.copy()
     
-    # 1. Clean Data (Handle commas, currency symbols, and whitespace)
+    # 1. Clean Data (Vectorized)
     df['Clean_Name'] = df[mapping['name']].fillna('Unknown').astype(str)
     exclude_keywords = 'choose any|shoose any|combo|bundle|bundel'
     df = df[~df['Clean_Name'].str.contains(exclude_keywords, case=False, na=False)]
 
-    def clean_numeric(val):
-        if pd.isna(val): return 0
-        if isinstance(val, (int, float)): return val
-        # Remove everything except digits and decimal point
-        clean_val = ''.join(c for c in str(val) if c.isdigit() or c == '.')
-        try:
-            return float(clean_val) if clean_val else 0
-        except ValueError:
-            return 0
-
-    df['Clean_Cost'] = df[mapping['cost']].apply(clean_numeric)
-    df['Clean_Qty'] = df[mapping['qty']].apply(clean_numeric)
+    df['Clean_Cost'] = clean_numeric_series(df[mapping['cost']])
+    df['Clean_Qty'] = clean_numeric_series(df[mapping['qty']])
     df.loc[df['Clean_Qty'] < 0, 'Clean_Qty'] = 0
     df['Total Amount'] = df['Clean_Cost'] * df['Clean_Qty']
-    df['Category'] = df['Clean_Name'].apply(get_product_category)
+    
+    # Fast unique-name categorization
+    active_mapping = load_category_mapping()
+    unique_names = df['Clean_Name'].unique()
+    cat_lookup = {name: get_product_category(name, active_mapping) for name in unique_names}
+    df['Category'] = df['Clean_Name'].map(cat_lookup).fillna('Others')
     
     # 2. Timeframe Detection
     timeframe = ""
@@ -574,8 +595,27 @@ def process_analytics(df, mapping):
 
 # --- UI Components ---
 
+@st.fragment
 def render_sidebar():
     with st.sidebar:
+        st.markdown(
+            """
+            <div style="padding: 0 0 10px 0;">
+                <div style="font-size: 1.15rem; font-weight: 700; color: var(--text-color); display: flex; align-items: center; justify-content: space-between;">
+                    <a href="https://deencommerce.com" target="_blank" style="text-decoration: none; color: inherit;">
+                        <span style="color: var(--primary-color, #007bff); letter-spacing: -0.01em;">DEEN Commerce</span>
+                    </a>
+                    <span style="font-size: 0.65rem; background: rgba(0, 123, 255, 0.12); color: var(--primary-color, #007bff); padding: 2px 8px; border-radius: 10px; font-weight: 600; text-transform: uppercase;">v2.1</span>
+                </div>
+                <div style="font-size: 0.78rem; color: var(--text-color); opacity: 0.65; margin-top: 3px; font-weight: 400;">
+                    Category Intelligence & Performance
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        st.divider()
+
         st.header(":material/feedback: Feedback & Debug")
         comment = st.text_area("Report Issues:", placeholder="Category 'Polo' is incorrect...")
         if st.button("Submit Report", icon=":material/send:"):
@@ -612,6 +652,62 @@ def render_footer(logo_b64):
     </div>
     """
     st.markdown(footer_html, unsafe_allow_html=True)
+
+def generate_excel_report(sheet_dict):
+    """Generates an optimized, beautifully styled Excel workbook with fast row iteration."""
+    buf = BytesIO()
+    with pd.ExcelWriter(buf, engine='openpyxl') as writer:
+        for sheet_name, dframe in sheet_dict.items():
+            dframe.to_excel(writer, sheet_name=sheet_name, index=False)
+        
+        wb = writer.book
+        header_fill = PatternFill(start_color='007BFF', end_color='007BFF', fill_type='solid')
+        header_font = Font(bold=True, color='FFFFFF')
+        total_fill = PatternFill(start_color='ECECEC', end_color='ECECEC', fill_type='solid')
+        thin_border = Border(
+            left=Side(style='thin'), right=Side(style='thin'),
+            top=Side(style='thin'), bottom=Side(style='thin')
+        )
+        
+        for sheet_name, dframe in sheet_dict.items():
+            ws = wb[sheet_name]
+            ws.freeze_panes = 'A2'
+            
+            # Style Header Row
+            for cell in ws[1]:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+                cell.border = thin_border
+            
+            # Pre-compute column configurations
+            col_alignments = [
+                Alignment(horizontal='left') if col in ['Category', 'Product Name', 'Product'] 
+                else Alignment(horizontal='right')
+                for col in dframe.columns
+            ]
+            is_numeric_col = [any(x in col for x in ['Qty', 'Price', 'Amount']) for col in dframe.columns]
+            
+            # Auto-adjust column widths
+            for i, col_name in enumerate(dframe.columns):
+                col_letter = ws.cell(row=1, column=i+1).column_letter
+                content_len = dframe[col_name].astype(str).str.len().max() if not dframe.empty else 0
+                ws.column_dimensions[col_letter].width = max(int(content_len), len(str(col_name))) + 3
+            
+            # Fast single-pass row styling using iter_rows
+            for row_cells in ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=1, max_col=len(dframe.columns)):
+                first_cell_str = str(row_cells[0].value).upper()
+                is_total = 'TOTAL' in first_cell_str
+                for idx, cell in enumerate(row_cells):
+                    cell.border = thin_border
+                    cell.alignment = col_alignments[idx]
+                    if is_numeric_col[idx]:
+                        cell.number_format = '#,##0'
+                    if is_total:
+                        cell.font = Font(bold=True)
+                        cell.fill = total_fill
+    buf.seek(0)
+    return buf.getvalue()
 
 # --- Main App ---
 
@@ -776,13 +872,80 @@ def main():
                 df_product.index = range(1, len(df_product) + 1)
 
                 with t1: 
-                    st.dataframe(df_breakdown[['Category', 'Total Qty', 'Total Amount']], width="stretch")
+                    st.dataframe(
+                        df_breakdown[['Category', 'Total Qty', 'Total Amount']],
+                        column_config={
+                            "Category": st.column_config.TextColumn("Product Category"),
+                            "Total Qty": st.column_config.NumberColumn("Total Units", format="%,.0f pcs"),
+                            "Total Amount": st.column_config.NumberColumn("Total Revenue", format="TK %,.0f"),
+                        },
+                        width="stretch",
+                        hide_index=True
+                    )
                 
                 with t2: 
-                    st.dataframe(df_drill[['Category', 'Price', 'Qty', 'Total Amount']], width="stretch")
+                    st.dataframe(
+                        df_drill[['Category', 'Price', 'Qty', 'Total Amount']],
+                        column_config={
+                            "Category": st.column_config.TextColumn("Product Category"),
+                            "Price": st.column_config.NumberColumn("Unit Price", format="TK %,.0f"),
+                            "Qty": st.column_config.NumberColumn("Units Sold", format="%,.0f pcs"),
+                            "Total Amount": st.column_config.NumberColumn("Total Revenue", format="TK %,.0f"),
+                        },
+                        width="stretch",
+                        hide_index=True
+                    )
 
                 with t3:
-                    st.dataframe(df_product[['Category', 'Product Name', 'Total Qty', 'Total Amount']], width="stretch")
+                    c_search, c_filter = st.columns([3, 2])
+                    with c_search:
+                        p_search = st.text_input(
+                            "Search Product", 
+                            placeholder="Search products by title or keyword...", 
+                            label_visibility="collapsed",
+                            key="tab3_product_search"
+                        )
+                    with c_filter:
+                        cat_choices = sorted([c for c in results['product_summary']['Category'].unique() if c])
+                        selected_cats = st.multiselect(
+                            "Filter Category", 
+                            options=cat_choices, 
+                            default=[], 
+                            placeholder="All Categories",
+                            label_visibility="collapsed",
+                            key="tab3_category_filter"
+                        )
+
+                    filtered_prod = results['product_summary'].copy()
+                    if selected_cats:
+                        filtered_prod = filtered_prod[filtered_prod['Category'].isin(selected_cats)]
+                    if p_search.strip():
+                        filtered_prod = filtered_prod[
+                            filtered_prod['Product Name'].str.contains(p_search.strip(), case=False, na=False)
+                        ]
+
+                    df_filtered_view = filtered_prod.sort_values(['Category', 'Total Amount'], ascending=[True, False]).copy()
+                    df_filtered_view.columns = ['Category', 'Product Name', 'Total Qty', 'Total Amount']
+                    
+                    f_total_qty = df_filtered_view['Total Qty'].sum()
+                    f_total_amt = df_filtered_view['Total Amount'].sum()
+                    
+                    df_filtered_view.loc[len(df_filtered_view) + 1] = [
+                        f"TOTAL ({len(df_filtered_view)} items)", None, f_total_qty, f_total_amt
+                    ]
+                    df_filtered_view.index = range(1, len(df_filtered_view) + 1)
+
+                    st.dataframe(
+                        df_filtered_view[['Category', 'Product Name', 'Total Qty', 'Total Amount']],
+                        column_config={
+                            "Category": st.column_config.TextColumn("Category"),
+                            "Product Name": st.column_config.TextColumn("Product Name"),
+                            "Total Qty": st.column_config.NumberColumn("Total Units", format="%,.0f pcs"),
+                            "Total Amount": st.column_config.NumberColumn("Total Revenue", format="TK %,.0f"),
+                        },
+                        width="stretch",
+                        hide_index=True
+                    )
 
                 # Unmapped Items Inspector ("Others" Review)
                 unmapped_df = results.get('unmapped_items')
@@ -792,10 +955,19 @@ def main():
                         st.success("All products were successfully categorized! Zero unmapped items.", icon=":material/check_circle:")
                     else:
                         u1, u2 = st.columns(2)
-                        u1.metric("Unmapped Units", f"{results['unmapped_qty']:,.0f}")
-                        u2.metric("Unmapped Revenue", f"TK {results['unmapped_rev']:,.0f}")
-                        st.caption("Review these products to identify missing keywords for your category rules in `CATEGORY_MAPPING`:")
-                        st.dataframe(unmapped_df, width="stretch", hide_index=True)
+                        u1.metric("Unmapped Units", f"{results['unmapped_qty']:,.0f}", border=True)
+                        u2.metric("Unmapped Revenue", f"TK {results['unmapped_rev']:,.0f}", border=True)
+                        st.caption("Review these products to identify missing keywords for your category rules in `config/categories.json`:")
+                        st.dataframe(
+                            unmapped_df,
+                            column_config={
+                                "Product Name": st.column_config.TextColumn("Product Description"),
+                                "Total Qty": st.column_config.NumberColumn("Quantity", format="%,.0f pcs"),
+                                "Total Amount": st.column_config.NumberColumn("Revenue Impact", format="TK %,.0f"),
+                            },
+                            width="stretch",
+                            hide_index=True
+                        )
 
                 # Export
                 sheet_dict = {
@@ -804,69 +976,9 @@ def main():
                     'Category-wise Product': df_product
                 }
 
-                buf = BytesIO()
-                with pd.ExcelWriter(buf, engine='openpyxl') as writer:
-                    for sheet_name, dframe in sheet_dict.items():
-                        dframe.to_excel(writer, sheet_name=sheet_name, index=False)
-                    
-                    # Access workbook
-                    wb = writer.book
-                    
-                    # Define Styles
-                    header_fill = PatternFill(start_color='007BFF', end_color='007BFF', fill_type='solid')
-                    header_font = Font(bold=True, color='FFFFFF')
-                    thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), 
-                                       top=Side(style='thin'), bottom=Side(style='thin'))
-                    
-                    for sheet_name, dframe in sheet_dict.items():
-                        ws = wb[sheet_name]
-                        
-                        # Style Header Row
-                        for cell in ws[1]:
-                            cell.fill = header_fill
-                            cell.font = header_font
-                            cell.alignment = Alignment(horizontal='center', vertical='center')
-                            cell.border = thin_border
-                        
-                        # Freeze the header row
-                        ws.freeze_panes = 'A2'
-                        
-                        # Styles for data rows
-                        total_fill = PatternFill(start_color='ECECEC', end_color='ECECEC', fill_type='solid')
-                        
-                        # Auto-adjust column widths and cell styling
-                        for i, col_name in enumerate(dframe.columns):
-                            # The column letter
-                            col_letter = ws.cell(row=1, column=i+1).column_letter
-                            
-                            # Content max width
-                            content_max = dframe[col_name].apply(lambda x: len(str(x)) if pd.notnull(x) else 0).max() if not dframe.empty else 0
-                            max_len = max(content_max, len(str(col_name))) + 2
-                            ws.column_dimensions[col_letter].width = max_len
-                            
-                            # Data rows cell styling
-                            for row_idx in range(2, ws.max_row + 1):
-                                cell = ws.cell(row=row_idx, column=i+1)
-                                cell.border = thin_border
-                                
-                                # Highlight total row
-                                first_cell_val = str(ws.cell(row=row_idx, column=1).value).upper()
-                                if 'TOTAL' in first_cell_val:
-                                    cell.font = Font(bold=True)
-                                    cell.fill = total_fill
-                                
-                                # Category and Product specific alignment
-                                if col_name in ['Category', 'Product Name', 'Product']:
-                                    cell.alignment = Alignment(horizontal='left')
-                                else:
-                                    cell.alignment = Alignment(horizontal='right')
-                                
-                                # Format Numbers (No .00 after TK)
-                                if any(x in col_name for x in ['Qty', 'Price', 'Amount']):
-                                    cell.number_format = '#,##0'
-                
+                excel_data = generate_excel_report(sheet_dict)
                 fname = f"Sales_Report_{results['timeframe']}.xlsx"
-                st.download_button("Download Report", data=buf.getvalue(), file_name=fname, icon=":material/download:")
+                st.download_button("Download Report", data=excel_data, file_name=fname, icon=":material/download:")
                 
         except Exception as e:
             st.error(f"Processing Error: {e}")
