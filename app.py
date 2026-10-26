@@ -650,28 +650,38 @@ def main():
             mandatory_keys = ['name', 'cost', 'qty']
             is_mapped = all(k in auto_cols for k in mandatory_keys)
             
-            st.subheader(":material/tune: Verify Column Mapping")
-            mc1, mc2, mc3, mc4, mc5, mc6 = st.columns(6)
-            
             def get_idx(key):
                 return all_cols.index(auto_cols[key]) if key in auto_cols else 0
 
-            m_name = mc1.selectbox("Product Name", all_cols, index=get_idx('name'))
-            m_cost = mc2.selectbox("Price", all_cols, index=get_idx('cost'))
-            m_qty = mc3.selectbox("Quantity", all_cols, index=get_idx('qty'))
-            m_date = mc4.selectbox("Date (Opt)", ["None"] + all_cols, index=get_idx('date')+1 if 'date' in auto_cols else 0)
-            m_order = mc5.selectbox("Order ID (Opt)", ["None"] + all_cols, index=get_idx('order_id')+1 if 'order_id' in auto_cols else 0)
-            m_phone = mc6.selectbox("Phone (Opt)", ["None"] + all_cols, index=get_idx('phone')+1 if 'phone' in auto_cols else 0)
-            
-            mapping = {
-                'name': m_name, 'cost': m_cost, 'qty': m_qty,
-                'date': m_date if m_date != "None" else None,
-                'order_id': m_order if m_order != "None" else None,
-                'phone': m_phone if m_phone != "None" else None
-            }
+            with st.container(border=True):
+                st.subheader(":material/tune: Verify Column Mapping", anchor=False)
+                if is_mapped:
+                    st.caption(":material/check_circle: Mandatory columns were auto-detected. Adjust if needed:")
+                else:
+                    st.caption(":material/info: Please match the required columns from your uploaded file:")
 
-            if st.button("Generate Analytics", icon=":material/analytics:"):
-                st.session_state['results'] = process_analytics(df, mapping)
+                st.markdown("**:material/check_circle: Required Fields** *(Mandatory for calculations)*")
+                rc1, rc2, rc3 = st.columns(3)
+                m_name = rc1.selectbox("Product Name *", all_cols, index=get_idx('name'), help="Column containing the product or item description")
+                m_cost = rc2.selectbox("Unit Price *", all_cols, index=get_idx('cost'), help="Column containing unit price or cost")
+                m_qty = rc3.selectbox("Quantity *", all_cols, index=get_idx('qty'), help="Column containing quantity sold")
+
+                st.markdown("**:material/add_circle: Optional Dimensions** *(Enables timeframe & basket size metrics)*")
+                oc1, oc2, oc3 = st.columns(3)
+                m_date = oc1.selectbox("Date (Opt)", ["None"] + all_cols, index=get_idx('date')+1 if 'date' in auto_cols else 0, help="Order date column for report timeframe")
+                m_order = oc2.selectbox("Order ID (Opt)", ["None"] + all_cols, index=get_idx('order_id')+1 if 'order_id' in auto_cols else 0, help="Order number or invoice ID for basket size")
+                m_phone = oc3.selectbox("Phone (Opt)", ["None"] + all_cols, index=get_idx('phone')+1 if 'phone' in auto_cols else 0, help="Customer contact for multi-item order grouping")
+
+                mapping = {
+                    'name': m_name, 'cost': m_cost, 'qty': m_qty,
+                    'date': m_date if m_date != "None" else None,
+                    'order_id': m_order if m_order != "None" else None,
+                    'phone': m_phone if m_phone != "None" else None
+                }
+
+                st.write("")
+                if st.button("Generate Analytics", icon=":material/analytics:", type="primary"):
+                    st.session_state['results'] = process_analytics(df, mapping)
 
             results = st.session_state.get('results')
             if results is not None:
