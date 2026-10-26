@@ -26,13 +26,15 @@ CATEGORY_MAPPING = {
     'Polo Shirt': ['polo'],
     'Cargo Trousers': ['cargo', 'cargo trousers'],
     'Trousers': ['trousers', 'pant', 'trcargo', 'trouser', 'joggers', 'track pant', 'jogger'],
-    'Twill Chino': ['twill chino'],
+    'Twill': ['twill chino', 'twill', 'chino'],
     'Mask': ['mask'],
     'Water Bottle': ['water bottle'],
     'Contrast Shirt': ['contrast'],
     'Turtleneck': ['turtleneck', 'mock neck'],
     'Drop Shoulder': ['drop', 'shoulder'],
     'Wallet': ['wallet'],
+    'Card Holder': ['card holder'],
+    'Passport Holder': ['passport holder'],
     'Kaftan Shirt': ['kaftan'],
     'Active Wear': ['active wear'],
     'Jersy': ['jersy'],
@@ -40,10 +42,13 @@ CATEGORY_MAPPING = {
     'Jacket': ['jacket', 'outerwear', 'coat'],
     'Belt': ['belt'],
     'Sweater': ['sweater', 'cardigan', 'knitwear'],
-    'Passport Holder': ['passport holder'],
     'Cap': ['cap'],
     'Leather Bag': ['bag', 'backpack'],
+    'Mug': ['mug'],
+    'Hoodie': ['hoodie'],
+    'Knit Cap': ['knit cap'],
 }
+
 
 LOGO_PNG = "assets/deen_logo.png"
 
@@ -486,6 +491,9 @@ def process_analytics(df, mapping):
     top_items = df.groupby('Clean_Name').agg({'Clean_Qty': 'sum', 'Total Amount': 'sum', 'Category': 'first'}).reset_index()
     top_items.columns = ['Product Name', 'Total Qty', 'Total Amount', 'Category']
     top_items = top_items.sort_values('Total Amount', ascending=False)
+
+    product_summary = df.groupby(['Category', 'Clean_Name']).agg({'Clean_Qty': 'sum', 'Total Amount': 'sum'}).reset_index()
+    product_summary.columns = ['Category', 'Product Name', 'Total Qty', 'Total Amount']
     
     # 4. Basket Metrics
     avg_basket_value = 0
@@ -499,6 +507,7 @@ def process_analytics(df, mapping):
         'drilldown': drilldown,
         'summary': summary,
         'top_items': top_items,
+        'product_summary': product_summary,
         'timeframe': timeframe,
         'avg_basket_value': avg_basket_value,
         'total_qty': t_qty,
@@ -628,7 +637,7 @@ def main():
                                        title='Volume by Category', color_discrete_sequence=color_seq), use_container_width=True)
                 
                 # Data Tables
-                t1, t2 = st.tabs(["📊 Category Summary", "💰 Price-wise Category"])
+                t1, t2, t3 = st.tabs(["📊 Category Summary", "💰 Price-wise Category", "📦 Category-wise Product"])
                 
                 df_breakdown = results['summary'].sort_values('Category', ascending=True).copy()
                 
@@ -648,17 +657,33 @@ def main():
                 df_drill.loc[len(df_drill) + 1] = ['TOTAL (All Categories)', None, df_drill['Qty'].sum(), df_drill['Total Amount'].sum()]
                 df_drill.index = range(1, len(df_drill) + 1)
 
+                df_product = results['product_summary'].sort_values(['Category', 'Total Amount'], ascending=[True, False]).copy()
+                df_product.columns = ['Category', 'Product Name', 'Total Qty', 'Total Amount']
+                
+                # Add Total Row
+                df_product.loc[len(df_product) + 1] = ['TOTAL (All Products)', None, df_product['Total Qty'].sum(), df_product['Total Amount'].sum()]
+                df_product.index = range(1, len(df_product) + 1)
+
                 with t1: 
                     st.dataframe(df_breakdown[['Category', 'Total Qty', 'Total Amount']], use_container_width=True)
                 
                 with t2: 
                     st.dataframe(df_drill[['Category', 'Price', 'Qty', 'Total Amount']], use_container_width=True)
+
+                with t3:
+                    st.dataframe(df_product[['Category', 'Product Name', 'Total Qty', 'Total Amount']], use_container_width=True)
                 
                 # Export
+                sheet_dict = {
+                    'Category Summary': df_breakdown,
+                    'Price-wise Category': df_drill,
+                    'Category-wise Product': df_product
+                }
+
                 buf = BytesIO()
                 with pd.ExcelWriter(buf, engine='openpyxl') as writer:
-                    df_breakdown.to_excel(writer, sheet_name='Category Summary', index=False)
-                    df_drill.to_excel(writer, sheet_name='Price-wise Category', index=False)
+                    for sheet_name, dframe in sheet_dict.items():
+                        dframe.to_excel(writer, sheet_name=sheet_name, index=False)
                     
                     # Access workbook
                     wb = writer.book
@@ -669,9 +694,8 @@ def main():
                     thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), 
                                        top=Side(style='thin'), bottom=Side(style='thin'))
                     
-                    for sheet_name in ['Category Summary', 'Price-wise Category']:
+                    for sheet_name, dframe in sheet_dict.items():
                         ws = wb[sheet_name]
-                        dframe = df_breakdown if sheet_name == 'Category Summary' else df_drill
                         
                         # Style Header Row
                         for cell in ws[1]:
@@ -707,8 +731,8 @@ def main():
                                     cell.font = Font(bold=True)
                                     cell.fill = total_fill
                                 
-                                # Category specific alignment
-                                if col_name == 'Category':
+                                # Category and Product specific alignment
+                                if col_name in ['Category', 'Product Name', 'Product']:
                                     cell.alignment = Alignment(horizontal='left')
                                 else:
                                     cell.alignment = Alignment(horizontal='right')
