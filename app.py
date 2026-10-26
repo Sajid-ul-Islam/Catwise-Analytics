@@ -576,9 +576,9 @@ def process_analytics(df, mapping):
 
 def render_sidebar():
     with st.sidebar:
-        st.header("💬 Feedback & Debug")
+        st.header(":material/feedback: Feedback & Debug")
         comment = st.text_area("Report Issues:", placeholder="Category 'Polo' is incorrect...")
-        if st.button("Submit Report"):
+        if st.button("Submit Report", icon=":material/send:"):
             feedback_file = os.path.join(FEEDBACK_DIR, "user_feedback.json")
             entry = {"timestamp": datetime.now().isoformat(), "comment": comment}
             try:
@@ -616,13 +616,16 @@ def render_footer(logo_b64):
 # --- Main App ---
 
 def main():
-    st.set_page_config(page_title="Sales Dashboard", page_icon="📊", layout="wide")
+    st.set_page_config(page_title="Sales Dashboard", page_icon=":material/monitoring:", layout="wide")
     apply_custom_styles()
     
+    if os.path.exists(LOGO_PNG):
+        st.logo(LOGO_PNG, link="https://deencommerce.com")
+        
     logo_b64 = load_logo()
     render_sidebar()
     
-    st.title("🚀 Sales Performance Dashboard")
+    st.title(":material/monitoring: Sales Performance Dashboard")
     
     uploaded_file = st.file_uploader("Upload Sales Data (Excel or CSV)", type=['xlsx', 'csv'])
     
@@ -638,7 +641,7 @@ def main():
             df = load_data(file_bytes, uploaded_file.name)
             st.success(f"Attached: {uploaded_file.name}")
             
-            with st.expander("🔍 Preview Data", expanded=False):
+            with st.expander("Preview Data", icon=":material/visibility:", expanded=False):
                 st.dataframe(df.head(10), width="stretch")
 
             # Column Mapping Section
@@ -647,7 +650,7 @@ def main():
             mandatory_keys = ['name', 'cost', 'qty']
             is_mapped = all(k in auto_cols for k in mandatory_keys)
             
-            st.subheader("🛠️ Verify Column Mapping")
+            st.subheader(":material/tune: Verify Column Mapping")
             mc1, mc2, mc3, mc4, mc5, mc6 = st.columns(6)
             
             def get_idx(key):
@@ -667,7 +670,7 @@ def main():
                 'phone': m_phone if m_phone != "None" else None
             }
 
-            if st.button("Generate Analytics"):
+            if st.button("Generate Analytics", icon=":material/analytics:"):
                 st.session_state['results'] = process_analytics(df, mapping)
 
             results = st.session_state.get('results')
@@ -706,7 +709,7 @@ def main():
                 v2.plotly_chart(fig_bar, width="stretch")
                 
                 # Data Tables
-                t1, t2, t3 = st.tabs(["📊 Category Summary", "💰 Price-wise Category", "📦 Category-wise Product"])
+                t1, t2, t3 = st.tabs([":material/table_chart: Category Summary", ":material/payments: Price-wise Category", ":material/inventory_2: Category-wise Product"])
                 
                 df_breakdown = results['summary'].sort_values('Category', ascending=True).copy()
                 
@@ -745,9 +748,9 @@ def main():
                 # Unmapped Items Inspector ("Others" Review)
                 unmapped_df = results.get('unmapped_items')
                 unmapped_count = len(unmapped_df) if unmapped_df is not None else 0
-                with st.expander(f"⚠️ Unmapped Products Inspector ('Others' — {unmapped_count} unique items)", expanded=False):
+                with st.expander(f"Unmapped Products Inspector ('Others' — {unmapped_count} unique items)", icon=":material/warning:", expanded=False):
                     if unmapped_df is None or unmapped_df.empty:
-                        st.success("🎉 All products were successfully categorized! Zero unmapped items.")
+                        st.success("All products were successfully categorized! Zero unmapped items.", icon=":material/check_circle:")
                     else:
                         u1, u2 = st.columns(2)
                         u1.metric("Unmapped Units", f"{results['unmapped_qty']:,.0f}")
@@ -824,7 +827,7 @@ def main():
                                     cell.number_format = '#,##0'
                 
                 fname = f"Sales_Report_{results['timeframe']}.xlsx"
-                st.download_button("📥 Download Report", data=buf.getvalue(), file_name=fname)
+                st.download_button("Download Report", data=buf.getvalue(), file_name=fname, icon=":material/download:")
                 
         except Exception as e:
             st.error(f"Processing Error: {e}")
