@@ -687,15 +687,15 @@ def main():
             if results is not None:
                 # Metrics Row
                 m1, m2, m3, m4 = st.columns(4)
-                m1.metric("Total Orders", f"{results['total_orders']:,.0f}")
-                m2.metric("Units Sold", f"{results['total_qty']:,.0f}")
-                m3.metric("Gross Revenue", f"TK {results['total_rev']:,.0f}")
+                m1.metric("Total Orders", f"{results['total_orders']:,.0f}", border=True)
+                m2.metric("Units Sold", f"{results['total_qty']:,.0f}", border=True)
+                m3.metric("Gross Revenue", f"TK {results['total_rev']:,.0f}", border=True)
                 
                 # Show Basket Value if data available
                 if results['avg_basket_value'] > 0:
-                    m4.metric("Basket Size", f"TK {results['avg_basket_value']:,.0f}")
+                    m4.metric("Basket Size", f"TK {results['avg_basket_value']:,.0f}", border=True, help="Average gross spend per order or customer phone")
                 else:
-                    m4.metric("Basket Size", "0")
+                    m4.metric("Basket Size", "N/A", border=True, help="Order ID or Phone column not provided")
 
                 st.divider()
                 
@@ -709,14 +709,43 @@ def main():
                 # Synchronized color map so each category has the exact same color in both charts
                 cat_color_map = get_category_color_map(results['summary']['Category'].unique())
                 
-                v1.plotly_chart(px.pie(summ_sorted, values='Total Amount', names='Category', color='Category', hole=0.5, 
-                                       title='Revenue by Category', color_discrete_map=cat_color_map), width="stretch")
+                with v1:
+                    with st.container(border=True):
+                        st.subheader(":material/pie_chart: Revenue by Category", anchor=False)
+                        fig_pie = px.pie(
+                            summ_sorted, 
+                            values='Total Amount', 
+                            names='Category', 
+                            color='Category', 
+                            hole=0.5, 
+                            color_discrete_map=cat_color_map
+                        )
+                        fig_pie.update_layout(
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            margin=dict(t=10, b=10, l=10, r=10),
+                            legend=dict(orientation="v", yanchor="middle", y=0.5, xanchor="left", x=1.0)
+                        )
+                        st.plotly_chart(fig_pie, width="stretch")
                 
-                fig_bar = px.bar(summ_qty_sorted, x='Category', y='Total Qty', color='Category', 
-                                 title='Volume by Category', color_discrete_map=cat_color_map)
-                fig_bar.update_layout(xaxis={'categoryorder': 'total descending'})
-                
-                v2.plotly_chart(fig_bar, width="stretch")
+                with v2:
+                    with st.container(border=True):
+                        st.subheader(":material/bar_chart: Volume by Category", anchor=False)
+                        fig_bar = px.bar(
+                            summ_qty_sorted, 
+                            x='Category', 
+                            y='Total Qty', 
+                            color='Category', 
+                            color_discrete_map=cat_color_map
+                        )
+                        fig_bar.update_layout(
+                            xaxis={'categoryorder': 'total descending'},
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            margin=dict(t=10, b=10, l=10, r=10),
+                            showlegend=False
+                        )
+                        st.plotly_chart(fig_bar, width="stretch")
                 
                 # Data Tables
                 t1, t2, t3 = st.tabs([":material/table_chart: Category Summary", ":material/payments: Price-wise Category", ":material/inventory_2: Category-wise Product"])
