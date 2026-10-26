@@ -596,21 +596,27 @@ def process_analytics(df, mapping):
 # --- UI Components ---
 
 @st.fragment
-def render_sidebar():
+def render_sidebar(logo_b64=None):
     with st.sidebar:
+        if not logo_b64:
+            logo_b64 = load_logo()
+        logo_html = f'<img src="data:image/png;base64,{logo_b64}" style="width: 40px; height: 40px; border-radius: 8px; object-fit: contain; flex-shrink: 0;">' if logo_b64 else ''
         st.markdown(
-            """
-            <div style="padding: 0 0 10px 0;">
-                <div style="font-size: 1.15rem; font-weight: 700; color: var(--text-color); display: flex; align-items: center; justify-content: space-between;">
-                    <a href="https://deencommerce.com" target="_blank" style="text-decoration: none; color: inherit;">
-                        <span style="color: var(--primary-color, #007bff); letter-spacing: -0.01em;">DEEN Commerce</span>
-                    </a>
-                    <span style="font-size: 0.65rem; background: rgba(0, 123, 255, 0.12); color: var(--primary-color, #007bff); padding: 2px 8px; border-radius: 10px; font-weight: 600; text-transform: uppercase;">v2.1</span>
+            f"""
+            <a href="https://deencommerce.com" target="_blank" style="text-decoration: none; color: inherit;">
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px; padding-top: 2px;">
+                    {logo_html}
+                    <div style="display: flex; flex-direction: column;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 1.2rem; font-weight: 700; color: var(--primary-color, #007bff); letter-spacing: -0.01em; line-height: 1.2;">DEEN Commerce</span>
+                            <span style="font-size: 0.65rem; background: rgba(0, 123, 255, 0.12); color: var(--primary-color, #007bff); padding: 2px 7px; border-radius: 8px; font-weight: 600; text-transform: uppercase;">Suite</span>
+                        </div>
+                        <div style="font-size: 0.78rem; color: var(--text-color); opacity: 0.65; font-weight: 400; margin-top: 2px;">
+                            Category Intelligence & Performance
+                        </div>
+                    </div>
                 </div>
-                <div style="font-size: 0.78rem; color: var(--text-color); opacity: 0.65; margin-top: 3px; font-weight: 400;">
-                    Category Intelligence & Performance
-                </div>
-            </div>
+            </a>
             """,
             unsafe_allow_html=True
         )
@@ -715,11 +721,8 @@ def main():
     st.set_page_config(page_title="Sales Dashboard", page_icon=":material/monitoring:", layout="wide")
     apply_custom_styles()
     
-    if os.path.exists(LOGO_PNG):
-        st.logo(LOGO_PNG, link="https://deencommerce.com")
-        
     logo_b64 = load_logo()
-    render_sidebar()
+    render_sidebar(logo_b64)
     
     st.title(":material/monitoring: Sales Performance Dashboard")
     
