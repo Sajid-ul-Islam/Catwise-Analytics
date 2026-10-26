@@ -470,6 +470,16 @@ def find_columns(df):
                     break
     return found
 
+@st.cache_data(show_spinner="Loading sales data...")
+def load_data(file_bytes, filename):
+    """Loads CSV or Excel data from uploaded bytes with caching."""
+    buf = BytesIO(file_bytes)
+    if filename.lower().endswith('.csv'):
+        return pd.read_csv(buf)
+    else:
+        return pd.read_excel(buf)
+
+@st.cache_data(show_spinner="Processing analytics & categorizing products...")
 def process_analytics(df, mapping):
     """Core data processing and metric calculation."""
     df = df.copy()
@@ -532,11 +542,29 @@ def process_analytics(df, mapping):
         order_groups = df.groupby(group_cols).agg({'Total Amount': 'sum'})
         avg_basket_value = order_groups['Total Amount'].mean()
         
+    # 5. Unmapped items analysis ("Others")
+    unmapped_df = df[df['Category'] == 'Others']
+    if not unmapped_df.empty:
+        unmapped_items = unmapped_df.groupby('Clean_Name').agg({
+            'Clean_Qty': 'sum',
+            'Total Amount': 'sum'
+        }).reset_index()
+        unmapped_items.columns = ['Product Name', 'Total Qty', 'Total Amount']
+        unmapped_items = unmapped_items.sort_values('Total Amount', ascending=False)
+    else:
+        unmapped_items = pd.DataFrame(columns=['Product Name', 'Total Qty', 'Total Amount'])
+
+    unmapped_qty = unmapped_items['Total Qty'].sum() if not unmapped_items.empty else 0
+    unmapped_rev = unmapped_items['Total Amount'].sum() if not unmapped_items.empty else 0
+
     return {
         'drilldown': drilldown,
         'summary': summary,
         'top_items': top_items,
         'product_summary': product_summary,
+        'unmapped_items': unmapped_items,
+        'unmapped_qty': unmapped_qty,
+        'unmapped_rev': unmapped_rev,
         'timeframe': timeframe,
         'avg_basket_value': avg_basket_value,
         'total_qty': t_qty,
@@ -600,11 +628,18 @@ def main():
     
     if uploaded_file:
         try:
-            df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
+            # Check if file changed to reset state
+            file_key = f"{uploaded_file.name}_{uploaded_file.size}"
+            if st.session_state.get('current_file_key') != file_key:
+                st.session_state['current_file_key'] = file_key
+                st.session_state['results'] = None
+
+            file_bytes = uploaded_file.getvalue()
+            df = load_data(file_bytes, uploaded_file.name)
             st.success(f"Attached: {uploaded_file.name}")
             
             with st.expander("🔍 Preview Data", expanded=False):
-                st.dataframe(df.head(10), use_container_width=True)
+                st.dataframe(df.head(10), width="stretch")
 
             # Column Mapping Section
             auto_cols = find_columns(df)
@@ -631,13 +666,12 @@ def main():
                 'order_id': m_order if m_order != "None" else None,
                 'phone': m_phone if m_phone != "None" else None
             }
-            
-            with st.expander("🔍 Preview Data"):
-                st.dataframe(df.head(10), use_container_width=True)
 
             if st.button("Generate Analytics"):
-                results = process_analytics(df, mapping)
-                
+                st.session_state['results'] = process_analytics(df, mapping)
+
+            results = st.session_state.get('results')
+            if results is not None:
                 # Metrics Row
                 m1, m2, m3, m4 = st.columns(4)
                 m1.metric("Total Orders", f"{results['total_orders']:,.0f}")
@@ -663,13 +697,13 @@ def main():
                 cat_color_map = get_category_color_map(results['summary']['Category'].unique())
                 
                 v1.plotly_chart(px.pie(summ_sorted, values='Total Amount', names='Category', color='Category', hole=0.5, 
-                                       title='Revenue by Category', color_discrete_map=cat_color_map), use_container_width=True)
+                                       title='Revenue by Category', color_discrete_map=cat_color_map), width="stretch")
                 
                 fig_bar = px.bar(summ_qty_sorted, x='Category', y='Total Qty', color='Category', 
                                  title='Volume by Category', color_discrete_map=cat_color_map)
                 fig_bar.update_layout(xaxis={'categoryorder': 'total descending'})
                 
-                v2.plotly_chart(fig_bar, use_container_width=True)
+                v2.plotly_chart(fig_bar, width="stretch")
                 
                 # Data Tables
                 t1, t2, t3 = st.tabs(["📊 Category Summary", "💰 Price-wise Category", "📦 Category-wise Product"])
@@ -700,14 +734,27 @@ def main():
                 df_product.index = range(1, len(df_product) + 1)
 
                 with t1: 
-                    st.dataframe(df_breakdown[['Category', 'Total Qty', 'Total Amount']], use_container_width=True)
+                    st.dataframe(df_breakdown[['Category', 'Total Qty', 'Total Amount']], width="stretch")
                 
                 with t2: 
-                    st.dataframe(df_drill[['Category', 'Price', 'Qty', 'Total Amount']], use_container_width=True)
+                    st.dataframe(df_drill[['Category', 'Price', 'Qty', 'Total Amount']], width="stretch")
 
                 with t3:
-                    st.dataframe(df_product[['Category', 'Product Name', 'Total Qty', 'Total Amount']], use_container_width=True)
-                
+                    st.dataframe(df_product[['Category', 'Product Name', 'Total Qty', 'Total Amount']], width="stretch")
+
+                # Unmapped Items Inspector ("Others" Review)
+                unmapped_df = results.get('unmapped_items')
+                unmapped_count = len(unmapped_df) if unmapped_df is not None else 0
+                with st.expander(f"⚠️ Unmapped Products Inspector ('Others' — {unmapped_count} unique items)", expanded=False):
+                    if unmapped_df is None or unmapped_df.empty:
+                        st.success("🎉 All products were successfully categorized! Zero unmapped items.")
+                    else:
+                        u1, u2 = st.columns(2)
+                        u1.metric("Unmapped Units", f"{results['unmapped_qty']:,.0f}")
+                        u2.metric("Unmapped Revenue", f"TK {results['unmapped_rev']:,.0f}")
+                        st.caption("Review these products to identify missing keywords for your category rules in `CATEGORY_MAPPING`:")
+                        st.dataframe(unmapped_df, width="stretch", hide_index=True)
+
                 # Export
                 sheet_dict = {
                     'Category Summary': df_breakdown,
@@ -782,6 +829,9 @@ def main():
         except Exception as e:
             st.error(f"Processing Error: {e}")
             log_event("CRASH", str(e))
+    else:
+        st.session_state['current_file_key'] = None
+        st.session_state['results'] = None
 
     render_footer(logo_b64)
 

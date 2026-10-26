@@ -41,6 +41,15 @@ Generates a polished `.xlsx` workbook via `openpyxl` with:
 - **Total Rows Highlighting**: Summary rows automatically styled with a soft gray background (`#ECECEC`) and bold text.
 - **Clean Alignment**: Text columns left-aligned; numerical quantities and revenues right-aligned.
 
+### ⚠️ Unmapped Items Inspector ("Others" Review)
+- **Zero-Loss Tracking**: Dedicated collapsible audit tool displaying all products categorized under `'Others'`.
+- **Revenue & Unit Impact**: Quantifies the exact gross revenue and unit volume tied to unclassified products to help prioritize category rule updates.
+- **Fast Rule Discovery**: Directly inspect product titles to quickly extract keywords for [`CATEGORY_MAPPING`](file:///d:/Repo/Catwise-Analytics-1/app.py#L17-L50).
+
+### ⚡ Performance Caching & Session State Persistence
+- **High-Performance Caching (`@st.cache_data`)**: File loading and heavy metric calculations are cached, preventing repetitive recalculations.
+- **Session State Persistence (`st.session_state`)**: Generated analytics remain active and persistent across all widget interactions, sidebar feedback, and theme toggling until a new file is uploaded.
+
 ### 💬 Feedback & Error Logging
 - Built-in sidebar reporting system to submit classification feedback and log misclassified items to `feedback/user_feedback.json`.
 - System event logger for troubleshooting and audit trails (`feedback/system_logs.json`).
