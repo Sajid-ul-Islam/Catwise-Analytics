@@ -915,9 +915,9 @@ def main():
                     
                     # In-line % margin with Gross Revenue; all cards uniform size without secondary rows
                     if has_basket:
-                        m1, m2, m3, m4, m5, m6 = st.columns(6)
-                    else:
                         m1, m2, m3, m4, m5 = st.columns(5)
+                    else:
+                        m1, m2, m3, m4 = st.columns(4)
                         
                     m1.metric("Total Orders", f"{results['total_orders']:,.0f}", border=True)
                     m2.metric("Units Sold", f"{results['total_qty']:,.0f}", border=True)
@@ -928,9 +928,8 @@ def main():
                         help=f"Gross Revenue: TK {results['total_rev']:,.0f} | Margin: {margin_pct:.1f}%\nTotal COGS: TK {cogs_val:,.0f} | Gross Profit: TK {profit_val:,.0f}"
                     )
                     m4.metric("Total COGS", f"TK {cogs_val:,.0f}", border=True, help="Total Cost of Goods Sold")
-                    m5.metric("Gross Profit", f"TK {profit_val:,.0f}", border=True, help=f"Gross Profit = Gross Revenue - Total COGS (TK {profit_val:,.0f})")
                     if has_basket:
-                        m6.metric("Basket Size", f"TK {results['avg_basket_value']:,.0f}", border=True, help="Average gross spend per order or customer phone")
+                        m5.metric("Basket Size", f"TK {results['avg_basket_value']:,.0f}", border=True, help="Average gross spend per order or customer phone")
                 else:
                     if has_basket:
                         m1, m2, m3, m4 = st.columns(4)
