@@ -114,10 +114,11 @@ def apply_custom_styles():
         /* Base Container */
         .main { background-color: transparent; }
         
-        /* Uniform Column & Card Height */
+        /* Uniform Column & Card Dimensions (All Cards Similar Size) */
         div[data-testid="column"] {
             display: flex !important;
             flex-direction: column !important;
+            flex: 1 1 0px !important;
         }
 
         div[data-testid="column"] > div {
@@ -127,55 +128,56 @@ def apply_custom_styles():
             height: 100% !important;
         }
 
-        /* Metric Styling - Premium Look */
+        /* Metric Styling - Identical Uniform Height and Padding */
         div[data-testid="stMetric"] { 
             background-color: var(--background-secondary, #ffffff); 
-            padding: 22px 20px; 
-            border-radius: 16px; 
-            box-shadow: 0 4px 20px rgba(0,0,0,0.06);
-            border: 1px solid var(--secondary-background-color, #ececec);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            height: 100% !important;
-            min-height: 135px !important;
+            padding: 18px 18px !important; 
+            border-radius: 16px !important; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05) !important;
+            border: 1px solid var(--secondary-background-color, #ececec) !important;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            height: 120px !important;
+            min-height: 120px !important;
+            max-height: 120px !important;
             display: flex !important;
             flex-direction: column !important;
-            justify-content: space-between !important;
+            justify-content: center !important;
+            box-sizing: border-box !important;
             overflow: visible !important;
         }
         
         div[data-testid="stMetric"]:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 12px 24px rgba(0,0,0,0.12);
-            border-color: #007bff;
+            transform: translateY(-4px) !important;
+            box-shadow: 0 10px 24px rgba(0,0,0,0.1) !important;
+            border-color: #007bff !important;
         }
 
-        /* Metric Label Support */
+        /* Metric Label Support - Compact Uniform Sizing */
         [data-testid="stMetricLabel"] {
             font-weight: 600 !important;
-            font-size: 1.05rem !important;
-            margin-bottom: 6px !important;
+            font-size: 0.95rem !important;
+            margin-bottom: 4px !important;
             color: var(--text-color, #1a1a1b) !important;
+            opacity: 0.85 !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
         }
 
-        /* Metric Value - Ensure Full Visibility */
+        /* Metric Value - High Visibility Responsive Inline Styling */
         [data-testid="stMetricValue"], 
         [data-testid="stMetricValue"] > div {
             font-weight: 800 !important;
-            font-size: 1.45rem !important;
+            font-size: clamp(1.15rem, 1.4vw, 1.45rem) !important;
             color: var(--text-color, #1a1a1b) !important;
             white-space: nowrap !important;
             overflow: visible !important;
             text-overflow: clip !important;
             min-width: fit-content !important;
+            line-height: 1.2 !important;
         }
 
-        /* Metric Delta Support - Clean Badge Without Awkward Arrow */
-        [data-testid="stMetricDelta"] {
-            font-weight: 700 !important;
-            font-size: 0.90rem !important;
-            margin-top: 6px !important;
-        }
-
+        /* Hide delta arrow if delta element ever renders */
         [data-testid="stMetricDelta"] svg {
             display: none !important;
         }
@@ -311,39 +313,47 @@ def apply_custom_styles():
 
         /* Metric Styling - Fully Dynamic with Equal Height */
         div[data-testid="stMetric"] { 
-            background-color: var(--secondary-background-color); 
-            padding: 22px 20px; 
-            border-radius: 16px; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-            border: 1px solid rgba(128, 128, 128, 0.1);
-            transition: all 0.3s ease;
-            height: 100% !important;
-            min-height: 135px !important;
+            background-color: var(--secondary-background-color) !important; 
+            padding: 18px 18px !important; 
+            border-radius: 16px !important; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05) !important;
+            border: 1px solid rgba(128, 128, 128, 0.12) !important;
+            transition: all 0.3s ease !important;
+            height: 120px !important;
+            min-height: 120px !important;
+            max-height: 120px !important;
             display: flex !important;
             flex-direction: column !important;
-            justify-content: space-between !important;
+            justify-content: center !important;
+            box-sizing: border-box !important;
         }
         
         div[data-testid="stMetric"]:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
-            border-color: var(--primary-color);
+            transform: translateY(-4px) !important;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1) !important;
+            border-color: var(--primary-color) !important;
         }
 
         [data-testid="stMetricLabel"] {
             font-weight: 600 !important;
-            opacity: 0.85;
+            font-size: 0.95rem !important;
+            margin-bottom: 4px !important;
+            opacity: 0.85 !important;
             color: var(--text-color) !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
         }
 
         [data-testid="stMetricValue"], 
         [data-testid="stMetricValue"] > div {
             font-weight: 800 !important;
-            font-size: 1.45rem !important;
+            font-size: clamp(1.15rem, 1.4vw, 1.45rem) !important;
             color: var(--text-color) !important;
             white-space: nowrap !important;
             overflow: visible !important;
             text-overflow: clip !important;
+            line-height: 1.2 !important;
         }
 
         /* UI Components - Inputs & Selectboxes */
@@ -903,7 +913,7 @@ def main():
                     profit_val = results.get('gross_profit', results['total_rev'] - cogs_val)
                     margin_pct = results.get('profit_margin', (profit_val / results['total_rev'] * 100) if results['total_rev'] > 0 else 0)
                     
-                    # Dedicated clean cards for Revenue, COGS, and Profit Margin
+                    # In-line % margin with Gross Revenue; all cards uniform size without secondary rows
                     if has_basket:
                         m1, m2, m3, m4, m5, m6 = st.columns(6)
                     else:
@@ -911,17 +921,14 @@ def main():
                         
                     m1.metric("Total Orders", f"{results['total_orders']:,.0f}", border=True)
                     m2.metric("Units Sold", f"{results['total_qty']:,.0f}", border=True)
-                    m3.metric("Gross Revenue", f"TK {results['total_rev']:,.0f}", border=True, help="Total gross revenue from sales")
-                    m4.metric("Total COGS", f"TK {cogs_val:,.0f}", border=True, help="Total Cost of Goods Sold")
-                    m5.metric(
-                        "Gross Profit",
-                        f"TK {profit_val:,.0f}",
-                        delta=f"{margin_pct:.1f}% Margin",
-                        delta_color="normal",
-                        delta_arrow="off",
-                        border=True,
-                        help=f"Gross Profit = Gross Revenue (TK {results['total_rev']:,.0f}) - Total COGS (TK {cogs_val:,.0f}) | Margin: {margin_pct:.1f}%"
+                    m3.metric(
+                        "Gross Revenue", 
+                        f"TK {results['total_rev']:,.0f} ({margin_pct:.1f}%)", 
+                        border=True, 
+                        help=f"Gross Revenue: TK {results['total_rev']:,.0f} | Margin: {margin_pct:.1f}%\nTotal COGS: TK {cogs_val:,.0f} | Gross Profit: TK {profit_val:,.0f}"
                     )
+                    m4.metric("Total COGS", f"TK {cogs_val:,.0f}", border=True, help="Total Cost of Goods Sold")
+                    m5.metric("Gross Profit", f"TK {profit_val:,.0f}", border=True, help=f"Gross Profit = Gross Revenue - Total COGS (TK {profit_val:,.0f})")
                     if has_basket:
                         m6.metric("Basket Size", f"TK {results['avg_basket_value']:,.0f}", border=True, help="Average gross spend per order or customer phone")
                 else:
