@@ -114,14 +114,33 @@ def apply_custom_styles():
         /* Base Container */
         .main { background-color: transparent; }
         
+        /* Uniform Column & Card Height */
+        div[data-testid="column"] {
+            display: flex !important;
+            flex-direction: column !important;
+        }
+
+        div[data-testid="column"] > div {
+            display: flex !important;
+            flex-direction: column !important;
+            flex: 1 1 auto !important;
+            height: 100% !important;
+        }
+
         /* Metric Styling - Premium Look */
         div[data-testid="stMetric"] { 
             background-color: var(--background-secondary, #ffffff); 
-            padding: 24px; 
+            padding: 22px 20px; 
             border-radius: 16px; 
             box-shadow: 0 4px 20px rgba(0,0,0,0.06);
             border: 1px solid var(--secondary-background-color, #ececec);
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            height: 100% !important;
+            min-height: 135px !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
+            overflow: visible !important;
         }
         
         div[data-testid="stMetric"]:hover {
@@ -133,8 +152,8 @@ def apply_custom_styles():
         /* Metric Label Support */
         [data-testid="stMetricLabel"] {
             font-weight: 600 !important;
-            font-size: 1.1rem !important;
-            margin-bottom: 8px !important;
+            font-size: 1.05rem !important;
+            margin-bottom: 6px !important;
             color: var(--text-color, #1a1a1b) !important;
         }
 
@@ -142,7 +161,7 @@ def apply_custom_styles():
         [data-testid="stMetricValue"], 
         [data-testid="stMetricValue"] > div {
             font-weight: 800 !important;
-            font-size: 1.5rem !important; /* Reduced for better fit on large numbers */
+            font-size: 1.45rem !important;
             color: var(--text-color, #1a1a1b) !important;
             white-space: nowrap !important;
             overflow: visible !important;
@@ -150,15 +169,15 @@ def apply_custom_styles():
             min-width: fit-content !important;
         }
 
-        /* Metric Delta Support - High Contrast Typography */
+        /* Metric Delta Support - Clean Badge Without Awkward Arrow */
         [data-testid="stMetricDelta"] {
             font-weight: 700 !important;
-            font-size: 0.95rem !important;
+            font-size: 0.90rem !important;
             margin-top: 6px !important;
         }
 
-        div[data-testid="stMetric"] {
-            overflow: visible !important;
+        [data-testid="stMetricDelta"] svg {
+            display: none !important;
         }
 
         /* Dark Mode Text Consistency - Users specifically want white text */
@@ -290,14 +309,19 @@ def apply_custom_styles():
             color: var(--text-color) !important;
         }
 
-        /* Metric Styling - Fully Dynamic */
+        /* Metric Styling - Fully Dynamic with Equal Height */
         div[data-testid="stMetric"] { 
             background-color: var(--secondary-background-color); 
-            padding: 24px; 
+            padding: 22px 20px; 
             border-radius: 16px; 
             box-shadow: 0 4px 15px rgba(0,0,0,0.05);
             border: 1px solid rgba(128, 128, 128, 0.1);
             transition: all 0.3s ease;
+            height: 100% !important;
+            min-height: 135px !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
         }
         
         div[data-testid="stMetric"]:hover {
@@ -308,14 +332,14 @@ def apply_custom_styles():
 
         [data-testid="stMetricLabel"] {
             font-weight: 600 !important;
-            opacity: 0.8;
+            opacity: 0.85;
             color: var(--text-color) !important;
         }
 
         [data-testid="stMetricValue"], 
         [data-testid="stMetricValue"] > div {
             font-weight: 800 !important;
-            font-size: 1.6rem !important;
+            font-size: 1.45rem !important;
             color: var(--text-color) !important;
             white-space: nowrap !important;
             overflow: visible !important;
@@ -871,49 +895,47 @@ def main():
 
             results = st.session_state.get('results')
             if results is not None:
-                # Metrics Row (5 Cards if COGS present, 4 Cards otherwise)
                 has_cogs = results.get('has_cogs') and results.get('total_cogs') is not None
+                has_basket = results.get('avg_basket_value', 0) > 0
+                
                 if has_cogs:
-                    m1, m2, m3, m4, m5 = st.columns(5)
-                    m1.metric("Total Orders", f"{results['total_orders']:,.0f}", border=True)
-                    m2.metric("Units Sold", f"{results['total_qty']:,.0f}", border=True)
-                    
                     cogs_val = results['total_cogs']
                     profit_val = results.get('gross_profit', results['total_rev'] - cogs_val)
                     margin_pct = results.get('profit_margin', (profit_val / results['total_rev'] * 100) if results['total_rev'] > 0 else 0)
                     
-                    m3.metric(
-                        "Gross Revenue", 
-                        f"TK {results['total_rev']:,.0f}", 
-                        delta=f"Total COGS: TK {cogs_val:,.0f}",
-                        delta_color="off",
-                        border=True,
-                        help=f"Gross Revenue: TK {results['total_rev']:,.0f} | Total COGS: TK {cogs_val:,.0f}"
-                    )
-                    
-                    m4.metric(
-                        "Gross Profit",
-                        f"TK {profit_val:,.0f}",
-                        delta=f"{margin_pct:+.1f}% Margin",
-                        delta_color="normal",
-                        border=True,
-                        help=f"Gross Profit = Gross Revenue (TK {results['total_rev']:,.0f}) - Total COGS (TK {cogs_val:,.0f}) | Margin: {margin_pct:.1f}%"
-                    )
-                    
-                    if results['avg_basket_value'] > 0:
-                        m5.metric("Basket Size", f"TK {results['avg_basket_value']:,.0f}", border=True, help="Average gross spend per order or customer phone")
+                    # Dedicated clean cards for Revenue, COGS, and Profit Margin
+                    if has_basket:
+                        m1, m2, m3, m4, m5, m6 = st.columns(6)
                     else:
-                        m5.metric("Basket Size", "N/A", border=True, help="Order ID or Phone column not provided")
-                else:
-                    m1, m2, m3, m4 = st.columns(4)
+                        m1, m2, m3, m4, m5 = st.columns(5)
+                        
                     m1.metric("Total Orders", f"{results['total_orders']:,.0f}", border=True)
                     m2.metric("Units Sold", f"{results['total_qty']:,.0f}", border=True)
                     m3.metric("Gross Revenue", f"TK {results['total_rev']:,.0f}", border=True, help="Total gross revenue from sales")
-                    
-                    if results['avg_basket_value'] > 0:
+                    m4.metric("Total COGS", f"TK {cogs_val:,.0f}", border=True, help="Total Cost of Goods Sold")
+                    m5.metric(
+                        "Gross Profit",
+                        f"TK {profit_val:,.0f}",
+                        delta=f"{margin_pct:.1f}% Margin",
+                        delta_color="normal",
+                        delta_arrow="off",
+                        border=True,
+                        help=f"Gross Profit = Gross Revenue (TK {results['total_rev']:,.0f}) - Total COGS (TK {cogs_val:,.0f}) | Margin: {margin_pct:.1f}%"
+                    )
+                    if has_basket:
+                        m6.metric("Basket Size", f"TK {results['avg_basket_value']:,.0f}", border=True, help="Average gross spend per order or customer phone")
+                else:
+                    if has_basket:
+                        m1, m2, m3, m4 = st.columns(4)
+                        m1.metric("Total Orders", f"{results['total_orders']:,.0f}", border=True)
+                        m2.metric("Units Sold", f"{results['total_qty']:,.0f}", border=True)
+                        m3.metric("Gross Revenue", f"TK {results['total_rev']:,.0f}", border=True, help="Total gross revenue from sales")
                         m4.metric("Basket Size", f"TK {results['avg_basket_value']:,.0f}", border=True, help="Average gross spend per order or customer phone")
                     else:
-                        m4.metric("Basket Size", "N/A", border=True, help="Order ID or Phone column not provided")
+                        m1, m2, m3 = st.columns(3)
+                        m1.metric("Total Orders", f"{results['total_orders']:,.0f}", border=True)
+                        m2.metric("Units Sold", f"{results['total_qty']:,.0f}", border=True)
+                        m3.metric("Gross Revenue", f"TK {results['total_rev']:,.0f}", border=True, help="Total gross revenue from sales")
 
                 st.divider()
                 
