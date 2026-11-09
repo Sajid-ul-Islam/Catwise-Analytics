@@ -150,6 +150,13 @@ def apply_custom_styles():
             min-width: fit-content !important;
         }
 
+        /* Metric Delta Support - High Contrast Typography */
+        [data-testid="stMetricDelta"] {
+            font-weight: 700 !important;
+            font-size: 0.95rem !important;
+            margin-top: 6px !important;
+        }
+
         div[data-testid="stMetric"] {
             overflow: visible !important;
         }
@@ -465,8 +472,15 @@ def find_columns(df):
     """Auto-detects columns from dataframe."""
     mapping = {
         'name': ['item name', 'product name', 'product', 'item', 'title', 'description', 'name'],
-        'cost': ['item cost', 'price', 'unit price', 'cost', 'rate', 'mrp', 'selling price'],
+        'cost': ['unit price', 'selling price', 'item price', 'price', 'mrp', 'rate', 'item cost', 'cost'],
         'qty': ['quantity', 'qty', 'units', 'sold', 'count', 'total quantity'],
+        'cogs': [
+            'cogs', 'total cogs', 'unit cogs', 'cogs total', 'cogs unit', 'item cogs', 'product cogs',
+            'cost of goods sold', 'cost of good sold', 'cost of goods',
+            'c.o.g.s', 'c.o.g.s.', 'cogs(tk)', 'cogs (tk)', 'cogs (bdt)', 'cogs(bdt)', 'cogs amount',
+            'cost price', 'buying price', 'purchase price', 'purchase cost', 'buying rate', 
+            'cost per item', 'unit cost', 'base cost', 'cost'
+        ],
         'date': ['date', 'order date', 'month', 'time', 'created at'],
         'order_id': ['order id', 'order #', 'invoice number', 'invoice #', 'order number', 'transaction id', 'id'],
         'phone': ['phone', 'contact', 'mobile', 'cell', 'phone number', 'customer phone']
@@ -476,16 +490,29 @@ def find_columns(df):
     lower_cols = [str(c).strip().lower() for c in actual_cols]
     
     for key, aliases in mapping.items():
+        used_cols = set(found.values())
         # Exact match
         for alias in aliases:
             if alias in lower_cols:
-                found[key] = actual_cols[lower_cols.index(alias)]
-                break
+                candidate = actual_cols[lower_cols.index(alias)]
+                if candidate not in used_cols:
+                    found[key] = candidate
+                    break
         # Partial match
         if key not in found:
             for i, col in enumerate(lower_cols):
-                if any(alias in col for alias in aliases):
-                    found[key] = actual_cols[i]
+                candidate = actual_cols[i]
+                if candidate in used_cols:
+                    continue
+                if key == 'cogs' and any(skip in col for skip in ['shipping', 'delivery', 'courier']):
+                    continue
+                if key == 'cogs':
+                    cogs_partial_aliases = [a for a in aliases if a != 'cost']
+                    if any(alias in col for alias in cogs_partial_aliases):
+                        found[key] = candidate
+                        break
+                elif any(alias in col for alias in aliases):
+                    found[key] = candidate
                     break
     return found
 
@@ -520,6 +547,39 @@ def process_analytics(df, mapping):
     df.loc[df['Clean_Qty'] < 0, 'Clean_Qty'] = 0
     df['Total Amount'] = df['Clean_Cost'] * df['Clean_Qty']
     
+    # Process COGS (Cost of Goods Sold) if mapped
+    has_cogs = False
+    total_cogs = None
+    if mapping.get('cogs') and mapping['cogs'] in df.columns:
+        cogs_col = mapping['cogs']
+        raw_cogs = clean_numeric_series(df[cogs_col])
+        cogs_col_lower = str(cogs_col).strip().lower()
+        
+        # Check if the column is explicitly Total COGS or Unit COGS
+        is_total_cogs = any(term in cogs_col_lower for term in ['total cogs', 'total_cogs', 'cogs total', 'cogs_total', 'total cost'])
+        
+        # Heuristic: if not explicitly named total, check if values reflect unit or total COGS
+        if not is_total_cogs:
+            multi_qty = df['Clean_Qty'] > 1
+            if multi_qty.any():
+                cost_nonzero = df.loc[multi_qty, 'Clean_Cost'].replace(0, pd.NA).dropna()
+                if not cost_nonzero.empty:
+                    valid_idx = cost_nonzero.index
+                    ratio = raw_cogs.loc[valid_idx] / df.loc[valid_idx, 'Clean_Cost']
+                    if (ratio > 1.1).mean() > 0.5:
+                        is_total_cogs = True
+        
+        if is_total_cogs:
+            df['Total COGS'] = raw_cogs.copy()
+            df.loc[df['Clean_Qty'] == 0, 'Total COGS'] = 0
+            df['Unit COGS'] = (df['Total COGS'] / df['Clean_Qty'].replace(0, 1)).round(2)
+        else:
+            df['Unit COGS'] = raw_cogs.copy()
+            df['Total COGS'] = df['Unit COGS'] * df['Clean_Qty']
+            
+        has_cogs = True
+        total_cogs = float(df['Total COGS'].sum())
+    
     # Fast unique-name categorization
     active_mapping = load_category_mapping()
     unique_names = df['Clean_Name'].unique()
@@ -539,11 +599,20 @@ def process_analytics(df, mapping):
         except: timeframe = "Report"
 
     # 3. Aggregations
-    summary = df.groupby('Category').agg({'Clean_Qty': 'sum', 'Total Amount': 'sum'}).reset_index()
-    summary.columns = ['Category', 'Total Qty', 'Total Amount']
+    summary_aggs = {'Clean_Qty': 'sum', 'Total Amount': 'sum'}
+    if has_cogs:
+        summary_aggs['Total COGS'] = 'sum'
+    summary = df.groupby('Category').agg(summary_aggs).reset_index()
+    if has_cogs:
+        summary.columns = ['Category', 'Total Qty', 'Total Amount', 'Total COGS']
+    else:
+        summary.columns = ['Category', 'Total Qty', 'Total Amount']
     
     t_rev = summary['Total Amount'].sum()
     t_qty = summary['Total Qty'].sum()
+    
+    gross_profit = float(t_rev - total_cogs) if total_cogs is not None else None
+    profit_margin = float((gross_profit / t_rev * 100)) if (gross_profit is not None and t_rev > 0) else None
     
     drilldown = df.groupby(['Category', 'Clean_Cost']).agg({'Clean_Qty': 'sum', 'Total Amount': 'sum'}).reset_index()
     drilldown.columns = ['Category', 'Price', 'Total Qty', 'Total Amount']
@@ -552,8 +621,14 @@ def process_analytics(df, mapping):
     top_items.columns = ['Product Name', 'Total Qty', 'Total Amount', 'Category']
     top_items = top_items.sort_values('Total Amount', ascending=False)
 
-    product_summary = df.groupby(['Category', 'Clean_Name']).agg({'Clean_Qty': 'sum', 'Total Amount': 'sum'}).reset_index()
-    product_summary.columns = ['Category', 'Product Name', 'Total Qty', 'Total Amount']
+    prod_aggs = {'Clean_Qty': 'sum', 'Total Amount': 'sum'}
+    if has_cogs:
+        prod_aggs['Total COGS'] = 'sum'
+    product_summary = df.groupby(['Category', 'Clean_Name']).agg(prod_aggs).reset_index()
+    if has_cogs:
+        product_summary.columns = ['Category', 'Product Name', 'Total Qty', 'Total Amount', 'Total COGS']
+    else:
+        product_summary.columns = ['Category', 'Product Name', 'Total Qty', 'Total Amount']
     
     # 4. Basket Metrics
     avg_basket_value = 0
@@ -590,7 +665,11 @@ def process_analytics(df, mapping):
         'avg_basket_value': avg_basket_value,
         'total_qty': t_qty,
         'total_rev': t_rev,
-        'total_orders': len(order_groups) if group_cols else 0
+        'total_orders': len(order_groups) if group_cols else 0,
+        'total_cogs': total_cogs,
+        'has_cogs': has_cogs,
+        'gross_profit': gross_profit,
+        'profit_margin': profit_margin
     }
 
 # --- UI Components ---
@@ -692,7 +771,7 @@ def generate_excel_report(sheet_dict):
                 else Alignment(horizontal='right')
                 for col in dframe.columns
             ]
-            is_numeric_col = [any(x in col for x in ['Qty', 'Price', 'Amount']) for col in dframe.columns]
+            is_numeric_col = [any(x in col for x in ['Qty', 'Price', 'Amount', 'COGS']) for col in dframe.columns]
             
             # Auto-adjust column widths
             for i, col_name in enumerate(dframe.columns):
@@ -755,7 +834,13 @@ def main():
             with st.container(border=True):
                 st.subheader(":material/tune: Verify Column Mapping", anchor=False)
                 if is_mapped:
-                    st.caption(":material/check_circle: Mandatory columns were auto-detected. Adjust if needed:")
+                    detected_extra = []
+                    if 'cogs' in auto_cols:
+                        detected_extra.append("COGS")
+                    if 'date' in auto_cols:
+                        detected_extra.append("Date")
+                    extra_str = f" (including {', '.join(detected_extra)})" if detected_extra else ""
+                    st.caption(f":material/check_circle: Mandatory columns{extra_str} were auto-detected. Adjust if needed:")
                 else:
                     st.caption(":material/info: Please match the required columns from your uploaded file:")
 
@@ -765,14 +850,16 @@ def main():
                 m_cost = rc2.selectbox("Unit Price *", all_cols, index=get_idx('cost'), help="Column containing unit price or cost")
                 m_qty = rc3.selectbox("Quantity *", all_cols, index=get_idx('qty'), help="Column containing quantity sold")
 
-                st.markdown("**:material/add_circle: Optional Dimensions** *(Enables timeframe & basket size metrics)*")
-                oc1, oc2, oc3 = st.columns(3)
-                m_date = oc1.selectbox("Date (Opt)", ["None"] + all_cols, index=get_idx('date')+1 if 'date' in auto_cols else 0, help="Order date column for report timeframe")
-                m_order = oc2.selectbox("Order ID (Opt)", ["None"] + all_cols, index=get_idx('order_id')+1 if 'order_id' in auto_cols else 0, help="Order number or invoice ID for basket size")
-                m_phone = oc3.selectbox("Phone (Opt)", ["None"] + all_cols, index=get_idx('phone')+1 if 'phone' in auto_cols else 0, help="Customer contact for multi-item order grouping")
+                st.markdown("**:material/add_circle: Optional Dimensions** *(Enables timeframe, basket size & COGS metrics)*")
+                oc1, oc2, oc3, oc4 = st.columns(4)
+                m_cogs = oc1.selectbox("COGS (Opt)", ["None"] + all_cols, index=get_idx('cogs')+1 if 'cogs' in auto_cols else 0, help="Column containing Cost of Goods Sold (per unit or total)")
+                m_date = oc2.selectbox("Date (Opt)", ["None"] + all_cols, index=get_idx('date')+1 if 'date' in auto_cols else 0, help="Order date column for report timeframe")
+                m_order = oc3.selectbox("Order ID (Opt)", ["None"] + all_cols, index=get_idx('order_id')+1 if 'order_id' in auto_cols else 0, help="Order number or invoice ID for basket size")
+                m_phone = oc4.selectbox("Phone (Opt)", ["None"] + all_cols, index=get_idx('phone')+1 if 'phone' in auto_cols else 0, help="Customer contact for multi-item order grouping")
 
                 mapping = {
                     'name': m_name, 'cost': m_cost, 'qty': m_qty,
+                    'cogs': m_cogs if m_cogs != "None" else None,
                     'date': m_date if m_date != "None" else None,
                     'order_id': m_order if m_order != "None" else None,
                     'phone': m_phone if m_phone != "None" else None
@@ -784,17 +871,49 @@ def main():
 
             results = st.session_state.get('results')
             if results is not None:
-                # Metrics Row
-                m1, m2, m3, m4 = st.columns(4)
-                m1.metric("Total Orders", f"{results['total_orders']:,.0f}", border=True)
-                m2.metric("Units Sold", f"{results['total_qty']:,.0f}", border=True)
-                m3.metric("Gross Revenue", f"TK {results['total_rev']:,.0f}", border=True)
-                
-                # Show Basket Value if data available
-                if results['avg_basket_value'] > 0:
-                    m4.metric("Basket Size", f"TK {results['avg_basket_value']:,.0f}", border=True, help="Average gross spend per order or customer phone")
+                # Metrics Row (5 Cards if COGS present, 4 Cards otherwise)
+                has_cogs = results.get('has_cogs') and results.get('total_cogs') is not None
+                if has_cogs:
+                    m1, m2, m3, m4, m5 = st.columns(5)
+                    m1.metric("Total Orders", f"{results['total_orders']:,.0f}", border=True)
+                    m2.metric("Units Sold", f"{results['total_qty']:,.0f}", border=True)
+                    
+                    cogs_val = results['total_cogs']
+                    profit_val = results.get('gross_profit', results['total_rev'] - cogs_val)
+                    margin_pct = results.get('profit_margin', (profit_val / results['total_rev'] * 100) if results['total_rev'] > 0 else 0)
+                    
+                    m3.metric(
+                        "Gross Revenue", 
+                        f"TK {results['total_rev']:,.0f}", 
+                        delta=f"Total COGS: TK {cogs_val:,.0f}",
+                        delta_color="off",
+                        border=True,
+                        help=f"Gross Revenue: TK {results['total_rev']:,.0f} | Total COGS: TK {cogs_val:,.0f}"
+                    )
+                    
+                    m4.metric(
+                        "Gross Profit",
+                        f"TK {profit_val:,.0f}",
+                        delta=f"{margin_pct:+.1f}% Margin",
+                        delta_color="normal",
+                        border=True,
+                        help=f"Gross Profit = Gross Revenue (TK {results['total_rev']:,.0f}) - Total COGS (TK {cogs_val:,.0f}) | Margin: {margin_pct:.1f}%"
+                    )
+                    
+                    if results['avg_basket_value'] > 0:
+                        m5.metric("Basket Size", f"TK {results['avg_basket_value']:,.0f}", border=True, help="Average gross spend per order or customer phone")
+                    else:
+                        m5.metric("Basket Size", "N/A", border=True, help="Order ID or Phone column not provided")
                 else:
-                    m4.metric("Basket Size", "N/A", border=True, help="Order ID or Phone column not provided")
+                    m1, m2, m3, m4 = st.columns(4)
+                    m1.metric("Total Orders", f"{results['total_orders']:,.0f}", border=True)
+                    m2.metric("Units Sold", f"{results['total_qty']:,.0f}", border=True)
+                    m3.metric("Gross Revenue", f"TK {results['total_rev']:,.0f}", border=True, help="Total gross revenue from sales")
+                    
+                    if results['avg_basket_value'] > 0:
+                        m4.metric("Basket Size", f"TK {results['avg_basket_value']:,.0f}", border=True, help="Average gross spend per order or customer phone")
+                    else:
+                        m4.metric("Basket Size", "N/A", border=True, help="Order ID or Phone column not provided")
 
                 st.divider()
                 
@@ -856,7 +975,11 @@ def main():
                 total_amount = df_breakdown['Total Amount'].sum()
                 
                 # Append row directly (using loc to avoid append/concat warnings)
-                df_breakdown.loc[len(df_breakdown) + 1] = ['TOTAL SALES (Summary)', total_qty, total_amount]
+                if results.get('has_cogs'):
+                    total_cogs_sum = df_breakdown['Total COGS'].sum()
+                    df_breakdown.loc[len(df_breakdown) + 1] = ['TOTAL SALES (Summary)', total_qty, total_amount, total_cogs_sum]
+                else:
+                    df_breakdown.loc[len(df_breakdown) + 1] = ['TOTAL SALES (Summary)', total_qty, total_amount]
                 
                 df_breakdown.index = range(1, len(df_breakdown) + 1)
                 
@@ -868,20 +991,27 @@ def main():
                 df_drill.index = range(1, len(df_drill) + 1)
 
                 df_product = results['product_summary'].sort_values(['Category', 'Total Amount'], ascending=[True, False]).copy()
-                df_product.columns = ['Category', 'Product Name', 'Total Qty', 'Total Amount']
-                
-                # Add Total Row
-                df_product.loc[len(df_product) + 1] = ['TOTAL (All Products)', None, df_product['Total Qty'].sum(), df_product['Total Amount'].sum()]
+                if results.get('has_cogs'):
+                    df_product.columns = ['Category', 'Product Name', 'Total Qty', 'Total Amount', 'Total COGS']
+                    df_product.loc[len(df_product) + 1] = ['TOTAL (All Products)', None, df_product['Total Qty'].sum(), df_product['Total Amount'].sum(), df_product['Total COGS'].sum()]
+                else:
+                    df_product.columns = ['Category', 'Product Name', 'Total Qty', 'Total Amount']
+                    df_product.loc[len(df_product) + 1] = ['TOTAL (All Products)', None, df_product['Total Qty'].sum(), df_product['Total Amount'].sum()]
                 df_product.index = range(1, len(df_product) + 1)
 
                 with t1: 
+                    t1_cols = ['Category', 'Total Qty', 'Total Amount']
+                    t1_cfg = {
+                        "Category": st.column_config.TextColumn("Product Category"),
+                        "Total Qty": st.column_config.NumberColumn("Total Units", format="%,.0f pcs"),
+                        "Total Amount": st.column_config.NumberColumn("Total Revenue", format="TK %,.0f"),
+                    }
+                    if results.get('has_cogs'):
+                        t1_cols.append('Total COGS')
+                        t1_cfg["Total COGS"] = st.column_config.NumberColumn("Total COGS", format="TK %,.0f")
                     st.dataframe(
-                        df_breakdown[['Category', 'Total Qty', 'Total Amount']],
-                        column_config={
-                            "Category": st.column_config.TextColumn("Product Category"),
-                            "Total Qty": st.column_config.NumberColumn("Total Units", format="%,.0f pcs"),
-                            "Total Amount": st.column_config.NumberColumn("Total Revenue", format="TK %,.0f"),
-                        },
+                        df_breakdown[t1_cols],
+                        column_config=t1_cfg,
                         width="stretch",
                         hide_index=True
                     )
@@ -928,24 +1058,35 @@ def main():
                         ]
 
                     df_filtered_view = filtered_prod.sort_values(['Category', 'Total Amount'], ascending=[True, False]).copy()
-                    df_filtered_view.columns = ['Category', 'Product Name', 'Total Qty', 'Total Amount']
-                    
-                    f_total_qty = df_filtered_view['Total Qty'].sum()
-                    f_total_amt = df_filtered_view['Total Amount'].sum()
-                    
-                    df_filtered_view.loc[len(df_filtered_view) + 1] = [
-                        f"TOTAL ({len(df_filtered_view)} items)", None, f_total_qty, f_total_amt
-                    ]
+                    t3_cols = ['Category', 'Product Name', 'Total Qty', 'Total Amount']
+                    t3_cfg = {
+                        "Category": st.column_config.TextColumn("Category"),
+                        "Product Name": st.column_config.TextColumn("Product Name"),
+                        "Total Qty": st.column_config.NumberColumn("Total Units", format="%,.0f pcs"),
+                        "Total Amount": st.column_config.NumberColumn("Total Revenue", format="TK %,.0f"),
+                    }
+                    if results.get('has_cogs'):
+                        t3_cols.append('Total COGS')
+                        t3_cfg["Total COGS"] = st.column_config.NumberColumn("Total COGS", format="TK %,.0f")
+                        df_filtered_view.columns = t3_cols
+                        f_total_qty = df_filtered_view['Total Qty'].sum()
+                        f_total_amt = df_filtered_view['Total Amount'].sum()
+                        f_total_cogs = df_filtered_view['Total COGS'].sum()
+                        df_filtered_view.loc[len(df_filtered_view) + 1] = [
+                            f"TOTAL ({len(df_filtered_view)} items)", None, f_total_qty, f_total_amt, f_total_cogs
+                        ]
+                    else:
+                        df_filtered_view.columns = t3_cols
+                        f_total_qty = df_filtered_view['Total Qty'].sum()
+                        f_total_amt = df_filtered_view['Total Amount'].sum()
+                        df_filtered_view.loc[len(df_filtered_view) + 1] = [
+                            f"TOTAL ({len(df_filtered_view)} items)", None, f_total_qty, f_total_amt
+                        ]
                     df_filtered_view.index = range(1, len(df_filtered_view) + 1)
 
                     st.dataframe(
-                        df_filtered_view[['Category', 'Product Name', 'Total Qty', 'Total Amount']],
-                        column_config={
-                            "Category": st.column_config.TextColumn("Category"),
-                            "Product Name": st.column_config.TextColumn("Product Name"),
-                            "Total Qty": st.column_config.NumberColumn("Total Units", format="%,.0f pcs"),
-                            "Total Amount": st.column_config.NumberColumn("Total Revenue", format="TK %,.0f"),
-                        },
+                        df_filtered_view[t3_cols],
+                        column_config=t3_cfg,
                         width="stretch",
                         hide_index=True
                     )

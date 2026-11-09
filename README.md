@@ -7,7 +7,8 @@ A modern Streamlit-based business intelligence tool engineered to convert raw sa
 ## 🚀 Key Features
 
 ### 🔍 Smart Data Ingestion & Column Auto-Detection
-- **Intelligent Column Mapping**: Automatically detects and maps essential sales fields (`Product Name`, `Price`, `Quantity`) and optional dimensions (`Date`, `Order ID`, `Customer Phone`).
+- **Intelligent Column Mapping**: Automatically detects and maps essential sales fields (`Product Name`, `Price`, `Quantity`) and optional dimensions (`COGS`, `Date`, `Order ID`, `Customer Phone`).
+- **COGS & Profit Intelligence**: Automatically detects Cost of Goods Sold (`COGS`, `Cost of Goods Sold`, `Cost Price`, `Unit Cost`, `Total COGS`, etc.) and displays **Total COGS** directly in the Gross Revenue KPI card along with profit and margin calculations.
 - **Data Sanitization**: Automatic cleaning of currency symbols, comma separators, whitespace, negative quantities, and exclusion of bundle/combo promotions.
 - **Timeframe Detection**: Automatically inspects date ranges to generate dynamic, timestamped report titles.
 
