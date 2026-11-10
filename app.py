@@ -792,8 +792,8 @@ def render_sidebar(logo_b64=None):
                 <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
                     <img src="data:image/png;base64,{logo_b64}" width="42" height="42" style="object-fit: contain; border-radius: 8px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15)); flex-shrink: 0;">
                     <div style="display: flex; flex-direction: column; justify-content: center;">
-                        <h2 style="margin: 0; font-size: 1.3rem; font-weight: 800; letter-spacing: -0.3px; line-height: 1.15;">DEEN Commerce</h2>
-                        <div style="margin-top: 3px; font-size: 0.8rem; opacity: 0.8; font-weight: 500; line-height: 1.1;">Daily Sales Report</div>
+                        <h2 style="margin: 0; font-size: 1.5rem; font-weight: 800; letter-spacing: -0.3px; line-height: 2.5;">DEEN Commerce</h2>
+                        <div style="margin-top: 3px; font-size: 0.8rem; opacity: 0.8; font-weight: 500; line-height: 1.1;"></div>
                     </div>
                 </div>
                 """,
@@ -871,7 +871,7 @@ def render_footer(logo_b64=None):
             <span>Powered by</span>
             <div class="brand-wrapper">
                 {logo_img}
-                <span class="brand-name">Catwise Analytics</span>
+                <span class="brand-name">DEEN Commerce</span>
             </div>
         </div>
     </div>
