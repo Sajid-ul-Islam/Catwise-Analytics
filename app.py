@@ -660,16 +660,21 @@ def render_sidebar(logo_b64=None):
         if logo_b64:
             st.markdown(
                 f"""
-                <div style="text-align: center; margin-bottom: 20px;">
-                    <img src="data:image/png;base64,{logo_b64}" width="160" style="filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1));">
+                <div style="text-align: center; margin-bottom: 12px;">
+                    <img src="data:image/png;base64,{logo_b64}" width="150" style="filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1));">
                 </div>
                 """,
                 unsafe_allow_html=True
             )
-        else:
-            st.title("Catwise Analytics")
-            
-        st.caption("E-Commerce Fashion Intelligence & Category Reports")
+        st.markdown(
+            """
+            <div style="text-align: center; margin-bottom: 12px;">
+                <h2 style="margin: 0; font-size: 1.45rem; font-weight: 700; letter-spacing: -0.3px;">Deen Commerce</h2>
+                <div style="margin-top: 4px; font-size: 0.85rem; opacity: 0.75; font-weight: 500;">Daily Sales Report</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
         st.divider()
 
         with st.expander(":material/tune: Category Rule Manager", expanded=False):
@@ -803,13 +808,13 @@ def generate_excel_report(sheet_dict):
 # --- Main App ---
 
 def main():
-    st.set_page_config(page_title="Sales Dashboard", page_icon=":material/monitoring:", layout="wide")
+    st.set_page_config(page_title="Sales Report", page_icon=":material/monitoring:", layout="wide")
     apply_custom_styles()
     
     logo_b64 = load_logo()
     render_sidebar(logo_b64)
 
-    st.title("Sales & Category Intelligence", anchor=False)
+    st.title("Sales Report", anchor=False)
     st.caption("Upload order reports to visualize volume, revenue, profit margins, and category drilldowns.")
 
     uploaded_file = st.file_uploader("Upload Sales Data (Excel or CSV)", type=['xlsx', 'csv'])
