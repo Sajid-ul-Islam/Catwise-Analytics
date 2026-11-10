@@ -942,13 +942,13 @@ def generate_excel_report(sheet_dict):
 # --- Main App ---
 
 def main():
-    st.set_page_config(page_title="Sales Report", page_icon=":material/monitoring:", layout="wide")
+    st.set_page_config(page_title="Daily Sales Report", page_icon=":material/monitoring:", layout="wide")
     apply_custom_styles()
     
     logo_b64 = load_logo()
     render_sidebar(logo_b64)
 
-    st.title("Sales Report", anchor=False)
+    st.title("Daily Sales Report", anchor=False)
     st.caption("Upload order reports to visualize volume, revenue, profit margins, and category drilldowns.")
 
     uploaded_file = st.file_uploader("Upload Sales Data (Excel or CSV)", type=['xlsx', 'csv'])
