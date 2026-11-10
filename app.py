@@ -1,21 +1,24 @@
 from pandas.errors import ClosedFileError
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.express as px
 import os
 import json
 import base64
+import re
 from datetime import datetime
 from io import BytesIO
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
-# --- Configuration & Styling ---
+# --- Configuration & Paths ---
 FEEDBACK_DIR = "feedback"
 CONFIG_DIR = "config"
 os.makedirs(FEEDBACK_DIR, exist_ok=True)
 os.makedirs(CONFIG_DIR, exist_ok=True)
 
 CATEGORIES_JSON = os.path.join(CONFIG_DIR, "categories.json")
+LOGO_PNG = os.path.join("assets", "deen_logo.png")
 
 # Default Category Mapping Rules
 DEFAULT_CATEGORY_MAPPING = {
@@ -50,71 +53,103 @@ DEFAULT_CATEGORY_MAPPING = {
     'Leather Bag': ['bag', 'backpack'],
     'Mug': ['mug'],
     'Hoodie': ['hoodie'],
-    'Knit Cap': ['knit cap'],
+    'Knit Cap': ['knit cap']
 }
 
 def load_category_mapping():
-    """Loads custom categories from config/categories.json if available, otherwise defaults."""
+    """Loads custom categories if available, else writes & returns default."""
     if os.path.exists(CATEGORIES_JSON):
         try:
-            with open(CATEGORIES_JSON, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if isinstance(data, dict) and data:
-                    return data
+            with open(CATEGORIES_JSON, 'r', encoding='utf-8') as f:
+                return json.load(f)
         except Exception:
             pass
-    return DEFAULT_CATEGORY_MAPPING
+    with open(CATEGORIES_JSON, 'w', encoding='utf-8') as f:
+        json.dump(DEFAULT_CATEGORY_MAPPING, f, indent=4)
+    return DEFAULT_CATEGORY_MAPPING.copy()
 
 CATEGORY_MAPPING = load_category_mapping()
 
-# Bright, vibrant qualitative color palette for high-contrast synchronized chart visuals
-CATEGORY_PALETTE = list(dict.fromkeys(
+# Synchronized Chart Palette System
+CATEGORY_PALETTE = (
     px.colors.qualitative.Plotly +
-    px.colors.qualitative.Vivid +
-    px.colors.qualitative.Bold +
     px.colors.qualitative.D3 +
-    px.colors.qualitative.Set1 +
+    px.colors.qualitative.G10 +
+    px.colors.qualitative.T10 +
+    px.colors.qualitative.Alphabet +
     px.colors.qualitative.Dark24
-))
+)
 
-ALL_KNOWN_CATEGORIES = list(CATEGORY_MAPPING.keys()) + [
-    'FS T-Shirt', 'T-Shirt', 'FS Shirt', 'HS Shirt', 'Others', 'Unknown'
-]
+ALL_KNOWN_CATEGORIES = sorted(
+    list(DEFAULT_CATEGORY_MAPPING.keys()) +
+    ['FS T-Shirt', 'T-Shirt', 'FS Shirt', 'Casual Shirt', 'Others']
+)
 
 CATEGORY_COLOR_MAP = {
-    cat: CATEGORY_PALETTE[i % len(CATEGORY_PALETTE)] for i, cat in enumerate(ALL_KNOWN_CATEGORIES)
+    cat: CATEGORY_PALETTE[i % len(CATEGORY_PALETTE)]
+    for i, cat in enumerate(ALL_KNOWN_CATEGORIES)
 }
 
 def get_category_color_map(categories):
-    """Returns a synchronized category-to-color mapping ensuring identical colors across charts."""
+    """Returns a deterministic, consistent color mapping for any subset of categories."""
     color_map = {}
-    known_cats = list(CATEGORY_COLOR_MAP.keys())
-    for i, cat in enumerate(categories):
+    for cat in sorted(categories):
         if cat in CATEGORY_COLOR_MAP:
             color_map[cat] = CATEGORY_COLOR_MAP[cat]
         else:
-            color_map[cat] = CATEGORY_PALETTE[(len(known_cats) + i) % len(CATEGORY_PALETTE)]
+            idx = abs(hash(cat)) % len(CATEGORY_PALETTE)
+            color_map[cat] = CATEGORY_PALETTE[idx]
     return color_map
 
-LOGO_PNG = "assets/deen_logo.png"
-
 def load_logo():
-    """Loads logo as base64 string from assets/deen_logo.png."""
+    """Loads brand logo as base64 string for safe embedding."""
     if os.path.exists(LOGO_PNG):
         try:
-            with open(LOGO_PNG, "rb") as f:
-                return base64.b64encode(f.read()).decode()
-        except: pass
-    return ""
+            with open(LOGO_PNG, "rb") as image_file:
+                return base64.b64encode(image_file.read()).decode()
+        except Exception:
+            return None
+    return None
+
+# --- Consolidated Premium Styling ---
 
 def apply_custom_styles():
-    """Applies premium CSS styles to the dashboard."""
+    """Applies a consolidated, high-contrast, theme-adaptive CSS design system."""
     st.markdown("""
         <style>
-        /* Base Container */
+        /* Import Modern Typography */
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+        /* Theme Color Variables */
+        :root {
+            --primary-color: #007BFF;
+            --background-color: #ffffff;
+            --secondary-background-color: #f8f9fa;
+            --text-color: #212529;
+            --border-color: #e9ecef;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --primary-color: #007BFF;
+                --background-color: #0e1117;
+                --secondary-background-color: #1a1a1a;
+                --text-color: #f8f9fa;
+                --border-color: #333333;
+            }
+        }
+
+        /* Base Typography */
+        html, body, [class*="css"] {
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
         .main { background-color: transparent; }
         
-        /* Uniform Column & Card Dimensions (All Cards Similar Size) */
+        h1, h2, h3, h4, h5, h6, p, span, label, .stMarkdown {
+            color: var(--text-color) !important;
+        }
+
+        /* Uniform Column & Card Dimensions */
         div[data-testid="column"] {
             display: flex !important;
             flex-direction: column !important;
@@ -128,203 +163,22 @@ def apply_custom_styles():
             height: 100% !important;
         }
 
-        /* Metric Styling - Identical Uniform Height and Padding */
-        div[data-testid="stMetric"] { 
-            background-color: var(--background-secondary, #ffffff); 
-            padding: 18px 18px !important; 
-            border-radius: 16px !important; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05) !important;
-            border: 1px solid var(--secondary-background-color, #ececec) !important;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-            height: 120px !important;
-            min-height: 120px !important;
-            max-height: 120px !important;
-            display: flex !important;
-            flex-direction: column !important;
-            justify-content: center !important;
-            box-sizing: border-box !important;
-            overflow: visible !important;
-        }
-        
-        div[data-testid="stMetric"]:hover {
-            transform: translateY(-4px) !important;
-            box-shadow: 0 10px 24px rgba(0,0,0,0.1) !important;
-            border-color: #007bff !important;
-        }
-
-        /* Metric Label Support - Compact Uniform Sizing */
-        [data-testid="stMetricLabel"] {
-            font-weight: 600 !important;
-            font-size: 0.95rem !important;
-            margin-bottom: 4px !important;
-            color: var(--text-color, #1a1a1b) !important;
-            opacity: 0.85 !important;
-            white-space: nowrap !important;
-            overflow: hidden !important;
-            text-overflow: ellipsis !important;
-        }
-
-        /* Metric Value - High Visibility Responsive Inline Styling */
-        [data-testid="stMetricValue"], 
-        [data-testid="stMetricValue"] > div {
-            font-weight: 800 !important;
-            font-size: clamp(1.15rem, 1.4vw, 1.45rem) !important;
-            color: var(--text-color, #1a1a1b) !important;
-            white-space: nowrap !important;
-            overflow: visible !important;
-            text-overflow: clip !important;
-            min-width: fit-content !important;
-            line-height: 1.2 !important;
-        }
-
-        /* Hide delta arrow if delta element ever renders */
-        [data-testid="stMetricDelta"] svg {
-            display: none !important;
-        }
-
-        /* Dark Mode Text Consistency - Users specifically want white text */
-        @media (prefers-color-scheme: dark) {
-            [data-testid="stMetricLabel"], 
-            [data-testid="stMetricValue"],
-            [data-testid="stMetricValue"] > div { 
-                color: #ffffff !important; 
-            }
-            div[data-testid="stMetric"] {
-                background-color: #1e1e1e !important;
-                border-color: #333 !important;
-            }
-        }
-
-        /* Streamlit Dark Theme Detection */
-        [data-theme="dark"] [data-testid="stMetricLabel"],
-        [data-theme="dark"] [data-testid="stMetricValue"],
-        [data-theme="dark"] [data-testid="stMetricValue"] > div {
-            color: #ffffff !important;
-        }
-        
-        [data-theme="dark"] div[data-testid="stMetric"] {
-            background-color: #1e1e1e !important;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-            border: 1px solid #333;
-        }
-
-        .stButton>button { 
-            width: 100%; 
-            border-radius: 12px; 
-            height: 3.5em; 
-            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%); 
-            color: white; 
-            font-weight: 600;
-            border: none;
-            transition: all 0.3s ease;
-        }
-        .stButton>button:hover {
-            transform: scale(1.02);
-            background: linear-gradient(135deg, #0056b3 0%, #004085 100%);
-            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
-        }
-        div[data-testid="stExpander"] { 
-            border: 1px solid var(--secondary-background-color, #eee); 
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-            background: var(--background-secondary, white);
-            border-radius: 14px;
-            margin-bottom: 1.5rem;
-            padding: 5px;
-            transition: border-color 0.3s ease;
-        }
-        
-        [data-theme="dark"] div[data-testid="stExpander"] {
-            background-color: #1a1a1a !important;
-            border-color: #333 !important;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-        }
-
-        @media (prefers-color-scheme: dark) {
-            div[data-testid="stExpander"] {
-                background-color: #1a1a1a !important;
-                border-color: #333 !important;
-            }
-        }
-        .sticky-footer {
-            position: fixed;
-            left: 0;
-            bottom: 0;
-            width: 100%;
-            background-color: #ffffff; /* Pure white in light mode */
-            color: #000000 !important; /* Pure black in light mode */
-            text-align: center;
-            padding: 18px 0;
-            border-top: 1px solid #e9ecef;
-            z-index: 999;
-            font-size: 0.9rem;
-            backdrop-filter: blur(12px);
-            box-shadow: 0 -4px 30px rgba(0,0,0,0.06);
-        }
-        [data-theme="dark"] .sticky-footer {
-            background-color: #121212 !important; /* Pure dark in dark mode */
-            color: #ffffff !important;
-            border-top: 1px solid #333 !important;
-        }
-        @media (prefers-color-scheme: dark) {
-            .sticky-footer {
-                background-color: #121212 !important;
-                color: #ffffff !important;
-            }
-        }
-        .footer-content-inner {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-        }
-        .brand-wrapper {
-            display: flex;
-            align-items: center;
-            gap: 2px;
-        }
-        .small-logo {
-            height: 24px;
-            width: auto;
-            filter: grayscale(0%);
-        }
-        .brand-name {
-            font-weight: 600;
-            color: #000000; /* Pure black in light mode */
-        }
-        [data-theme="dark"] .brand-name {
-            color: #ffffff !important;
-        }
-        @media (prefers-color-scheme: dark) {
-            .brand-name {
-                color: #ffffff !important;
-            }
-        }
-        .block-container {
-            padding-bottom: 150px !important;
-            padding-top: 3rem !important;
-        }
-
-        /* --- Theme-Aware Dynamic Styling --- */
-        
-        /* Universal Typography */
-        h1, h2, h3, h4, h5, h6, p, span, label, .stMarkdown {
-            color: var(--text-color) !important;
-        }
-
-        /* Metric Styling - Fully Dynamic with Equal Height */
+        /* Metric Styling - Identical Uniform Height, Baseline Alignment & Responsive Font */
         div[data-testid="stMetric"] { 
             background-color: var(--secondary-background-color) !important; 
-            padding: 18px 18px !important; 
+            padding: 16px 16px !important; 
             border-radius: 16px !important; 
             box-shadow: 0 4px 15px rgba(0,0,0,0.05) !important;
-            border: 1px solid rgba(128, 128, 128, 0.12) !important;
+            border: 1px solid rgba(128, 128, 128, 0.15) !important;
             transition: all 0.3s ease !important;
             height: 120px !important;
             min-height: 120px !important;
             max-height: 120px !important;
             display: flex !important;
-            flex-direction: column !important;
-            justify-content: center !important;
+            flex-direction: row !important;
+            flex-wrap: wrap !important;
+            align-content: center !important;
+            align-items: baseline !important;
             box-sizing: border-box !important;
         }
         
@@ -335,9 +189,11 @@ def apply_custom_styles():
         }
 
         [data-testid="stMetricLabel"] {
+            width: 100% !important;
+            flex: 0 0 100% !important;
             font-weight: 600 !important;
             font-size: 0.95rem !important;
-            margin-bottom: 4px !important;
+            margin-bottom: 6px !important;
             opacity: 0.85 !important;
             color: var(--text-color) !important;
             white-space: nowrap !important;
@@ -347,13 +203,49 @@ def apply_custom_styles():
 
         [data-testid="stMetricValue"], 
         [data-testid="stMetricValue"] > div {
+            display: inline-flex !important;
+            align-items: baseline !important;
             font-weight: 800 !important;
-            font-size: clamp(1.15rem, 1.4vw, 1.45rem) !important;
+            font-size: clamp(1.05rem, 1.3vw, 1.35rem) !important;
             color: var(--text-color) !important;
             white-space: nowrap !important;
             overflow: visible !important;
             text-overflow: clip !important;
             line-height: 1.2 !important;
+        }
+
+        /* In-Line Smaller Margin % in Metric Card */
+        [data-testid="stMetricDelta"],
+        [data-testid="stMetricDelta"] > div,
+        [data-testid="stMetricDelta"] span {
+            display: inline-flex !important;
+            align-items: baseline !important;
+            margin-left: 6px !important;
+            font-size: 0.80rem !important;
+            font-weight: 600 !important;
+            opacity: 0.9 !important;
+            background: transparent !important;
+            padding: 0 !important;
+            line-height: 1.2 !important;
+        }
+
+        [data-testid="stMetricDelta"] svg {
+            display: none !important;
+        }
+
+        /* Donut Chart Transparent Slice Separator - Adaptive Theme Stroke */
+        div[data-testid="stPlotlyChart"] .js-plotly-plot .slice path,
+        div[data-testid="stPlotlyChart"] .js-plotly-plot path.surface {
+            stroke: var(--background-color, #ffffff) !important;
+            stroke-width: 3px !important;
+            stroke-linejoin: round !important;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            div[data-testid="stPlotlyChart"] .js-plotly-plot .slice path,
+            div[data-testid="stPlotlyChart"] .js-plotly-plot path.surface {
+                stroke: #0e1117 !important;
+            }
         }
 
         /* UI Components - Inputs & Selectboxes */
@@ -372,7 +264,7 @@ def apply_custom_styles():
             border-radius: 12px; 
             height: 3.5em; 
             background-color: var(--primary-color) !important;
-            color: white !important; /* Buttons usually have white text regardless of theme */
+            color: white !important;
             font-weight: 700;
             border: none;
             transition: all 0.2s ease;
@@ -397,9 +289,15 @@ def apply_custom_styles():
         /* Expander & Notifications */
         div[data-testid="stExpander"], div[data-testid="stNotification"] {
             background-color: var(--secondary-background-color) !important;
-            border: 1px solid rgba(128, 128, 128, 0.1) !important;
+            border: 1px solid rgba(128, 128, 128, 0.15) !important;
             border-radius: 14px !important;
             color: var(--text-color) !important;
+        }
+
+        /* Main Container Padding to Avoid Sticky Footer Overlap */
+        .block-container {
+            padding-bottom: 150px !important;
+            padding-top: 3rem !important;
         }
 
         /* Sticky Footer - Dynamic Contrast & Always Fixed */
@@ -412,38 +310,46 @@ def apply_custom_styles():
             background-color: var(--background-color) !important;
             color: var(--text-color) !important;
             text-align: center;
-            padding: 20px 0;
+            padding: 18px 0;
             border-top: 1px solid rgba(128, 128, 128, 0.2);
             z-index: 999999;
             font-size: 0.9rem;
             backdrop-filter: blur(10px);
-            box-shadow: 0 -5px 25px rgba(0,0,0,0.1);
-        }
-        
-        [data-theme="dark"] .sticky-footer {
-            background-color: #0e1117 !important; /* Pure black/dark for contrast */
-            box-shadow: 0 -5px 25px rgba(0,0,0,0.4);
+            box-shadow: 0 -5px 25px rgba(0,0,0,0.08);
         }
 
-        /* Force Whitish text specifically in Dark Mode */
-        [data-theme="dark"] .sticky-footer, 
-        [data-theme="dark"] .sticky-footer span,
-        [data-theme="dark"] .brand-name {
-            color: #f8f9fa !important;
-        }
-        
         @media (prefers-color-scheme: dark) {
-            .sticky-footer, .brand-name {
+            .sticky-footer {
+                background-color: #0e1117 !important;
+                color: #f8f9fa !important;
+            }
+            .brand-name {
                 color: #f8f9fa !important;
             }
         }
 
+        .footer-content-inner {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        .brand-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+        }
+        .small-logo {
+            height: 24px;
+            width: auto;
+            filter: grayscale(0%);
+        }
         .brand-name {
             font-weight: 700;
             color: var(--primary-color);
         }
 
-        /* --- Responsive Design --- */
+        /* Responsive Mobile Adjustments */
         @media (max-width: 768px) {
             .block-container {
                 padding-left: 1rem !important;
@@ -457,17 +363,17 @@ def apply_custom_styles():
             [data-testid="stMetricValue"] {
                 font-size: 1.3rem !important;
             }
-            /* Keep footer fixed and prominent even on mobile */
             .sticky-footer {
                 padding: 15px 5px !important;
             }
         }
-        """, unsafe_allow_html=True)
+        </style>
+    """, unsafe_allow_html=True)
 
-# --- Helper Functions ---
+# --- Business Logic & Data Processing ---
 
 def log_event(event_type, details):
-    """Logs system events to JSON."""
+    """Logs system events to feedback/system_logs.json safely."""
     log_file = os.path.join(FEEDBACK_DIR, "system_logs.json")
     entry = {
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -477,33 +383,50 @@ def log_event(event_type, details):
     try:
         logs = []
         if os.path.exists(log_file):
-            with open(log_file, "r") as f: logs = json.load(f)
+            with open(log_file, "r", encoding="utf-8") as f:
+                logs = json.load(f)
         logs.append(entry)
-        with open(log_file, "w") as f: json.dump(logs[-100:], f, indent=4)
-    except: pass
+        with open(log_file, "w", encoding="utf-8") as f:
+            json.dump(logs[-100:], f, indent=4)
+    except (IOError, json.JSONDecodeError, OSError):
+        pass
+
+def matches_keyword(keyword, text_lower):
+    """Matches a keyword against lowercase text safely, using word boundaries for short terms."""
+    kw = keyword.strip().lower()
+    if not kw:
+        return False
+    # For short terms (<= 4 chars like 'top', 'cap', 'tee', 'fs'), use word boundary
+    if len(kw) <= 4:
+        pattern = r'(?<![a-zA-Z0-9])' + re.escape(kw) + r'(?![a-zA-Z0-9])'
+        return bool(re.search(pattern, text_lower))
+    return kw in text_lower
 
 def get_product_category(name, mapping_dict=None):
-    """Categorizes product based on keywords."""
+    """Categorizes product based on keywords with length prioritization and word boundaries."""
     if mapping_dict is None:
         mapping_dict = load_category_mapping()
     name_str = str(name).lower()
+    
+    # 1. Match configured categories (longer, more specific keywords first)
     for cat, keywords in mapping_dict.items():
-        if any(kw.lower() in name_str for kw in keywords):
+        sorted_kw = sorted(keywords, key=len, reverse=True)
+        if any(matches_keyword(kw, name_str) for kw in sorted_kw):
             return cat
     
-    # Special handling for T-Shirts and Shirts
+    # 2. Special handling for T-Shirts and Shirts
     fs_keywords = ['full sleeve', 'long sleeve', 'fs', 'l/s']
-    is_fs = any(kw in name_str for kw in fs_keywords)
+    is_fs = any(matches_keyword(kw, name_str) for kw in fs_keywords)
     
-    if any(kw in name_str for kw in ['t-shirt', 't shirt', 'tee']):
+    if any(matches_keyword(kw, name_str) for kw in ['t-shirt', 't shirt', 'tee']):
         return 'FS T-Shirt' if is_fs else 'T-Shirt'
-    if 'shirt' in name_str:
-        return 'FS Shirt' if is_fs else 'HS Shirt'
+    if matches_keyword('shirt', name_str):
+        return 'FS Shirt' if is_fs else 'Casual Shirt'
         
     return 'Others'
 
 def find_columns(df):
-    """Auto-detects columns from dataframe."""
+    """Auto-detects required and optional columns with priority-based alias matching."""
     mapping = {
         'name': ['item name', 'product name', 'product', 'item', 'title', 'description', 'name'],
         'cost': ['unit price', 'selling price', 'item price', 'price', 'mrp', 'rate', 'item cost', 'cost'],
@@ -551,11 +474,19 @@ def find_columns(df):
     return found
 
 def clean_numeric_series(series):
-    """Fast vectorized numeric cleaning removing currency, commas, and whitespace."""
+    """Fast vectorized numeric cleaning removing currency, commas, and whitespace while preserving negative numbers."""
     if pd.api.types.is_numeric_dtype(series):
         return pd.to_numeric(series.fillna(0), errors='coerce').fillna(0)
-    cleaned = series.astype(str).str.replace(r'[^0-9.]', '', regex=True)
-    return pd.to_numeric(cleaned, errors='coerce').fillna(0)
+    
+    s_str = series.astype(str).str.strip()
+    is_paren_negative = s_str.str.startswith('(') & s_str.str.endswith(')')
+    
+    cleaned = s_str.str.replace(r'[^0-9.-]', '', regex=True)
+    cleaned = cleaned.str.replace(r'(?!^)-', '', regex=True)
+    
+    numeric = pd.to_numeric(cleaned, errors='coerce').fillna(0)
+    numeric = np.where(is_paren_negative, -numeric.abs(), numeric)
+    return pd.Series(numeric, index=series.index)
 
 @st.cache_data(show_spinner="Loading sales data...")
 def load_data(file_bytes, filename):
@@ -568,7 +499,7 @@ def load_data(file_bytes, filename):
 
 @st.cache_data(show_spinner="Processing analytics & categorizing products...")
 def process_analytics(df, mapping):
-    """Core data processing and metric calculation."""
+    """Core data processing, COGS heuristics, profit margins, and metric aggregations."""
     df = df.copy()
     
     # 1. Clean Data (Vectorized)
@@ -581,7 +512,7 @@ def process_analytics(df, mapping):
     df.loc[df['Clean_Qty'] < 0, 'Clean_Qty'] = 0
     df['Total Amount'] = df['Clean_Cost'] * df['Clean_Qty']
     
-    # Process COGS (Cost of Goods Sold) if mapped
+    # 2. Process COGS (Cost of Goods Sold) if mapped
     has_cogs = False
     total_cogs = None
     if mapping.get('cogs') and mapping['cogs'] in df.columns:
@@ -589,7 +520,6 @@ def process_analytics(df, mapping):
         raw_cogs = clean_numeric_series(df[cogs_col])
         cogs_col_lower = str(cogs_col).strip().lower()
         
-        # Check if the column is explicitly Total COGS or Unit COGS
         is_total_cogs = any(term in cogs_col_lower for term in ['total cogs', 'total_cogs', 'cogs total', 'cogs_total', 'total cost'])
         
         # Heuristic: if not explicitly named total, check if values reflect unit or total COGS
@@ -614,13 +544,13 @@ def process_analytics(df, mapping):
         has_cogs = True
         total_cogs = float(df['Total COGS'].sum())
     
-    # Fast unique-name categorization
+    # 3. Fast unique-name categorization
     active_mapping = load_category_mapping()
     unique_names = df['Clean_Name'].unique()
     cat_lookup = {name: get_product_category(name, active_mapping) for name in unique_names}
     df['Category'] = df['Clean_Name'].map(cat_lookup).fillna('Others')
     
-    # 2. Timeframe Detection
+    # 4. Timeframe Detection
     timeframe = ""
     if mapping.get('date') and mapping['date'] in df.columns:
         try:
@@ -630,15 +560,21 @@ def process_analytics(df, mapping):
                     timeframe = dates.iloc[0].strftime("%B_%Y")
                 else:
                     timeframe = f"{dates.min().strftime('%d%b')}_to_{dates.max().strftime('%d%b_%y')}"
-        except: timeframe = "Report"
+        except Exception:
+            timeframe = "Report"
 
-    # 3. Aggregations
+    # 5. Aggregations
     summary_aggs = {'Clean_Qty': 'sum', 'Total Amount': 'sum'}
     if has_cogs:
         summary_aggs['Total COGS'] = 'sum'
     summary = df.groupby('Category').agg(summary_aggs).reset_index()
     if has_cogs:
         summary.columns = ['Category', 'Total Qty', 'Total Amount', 'Total COGS']
+        summary['Profit Margin %'] = np.where(
+            summary['Total Amount'] > 0,
+            ((summary['Total Amount'] - summary['Total COGS']) / summary['Total Amount'] * 100).round(1),
+            0.0
+        )
     else:
         summary.columns = ['Category', 'Total Qty', 'Total Amount']
     
@@ -661,18 +597,26 @@ def process_analytics(df, mapping):
     product_summary = df.groupby(['Category', 'Clean_Name']).agg(prod_aggs).reset_index()
     if has_cogs:
         product_summary.columns = ['Category', 'Product Name', 'Total Qty', 'Total Amount', 'Total COGS']
+        product_summary['Profit Margin %'] = np.where(
+            product_summary['Total Amount'] > 0,
+            ((product_summary['Total Amount'] - product_summary['Total COGS']) / product_summary['Total Amount'] * 100).round(1),
+            0.0
+        )
     else:
         product_summary.columns = ['Category', 'Product Name', 'Total Qty', 'Total Amount']
     
-    # 4. Basket Metrics
+    # 6. Basket Metrics & Order Count
     avg_basket_value = 0
     group_cols = [c for c in [mapping.get('order_id'), mapping.get('phone')] if c and c in df.columns]
     
     if group_cols:
         order_groups = df.groupby(group_cols).agg({'Total Amount': 'sum'})
         avg_basket_value = order_groups['Total Amount'].mean()
+        total_orders = len(order_groups)
+    else:
+        total_orders = len(df)
         
-    # 5. Unmapped items analysis ("Others")
+    # 7. Unmapped items analysis ("Others")
     unmapped_df = df[df['Category'] == 'Others']
     if not unmapped_df.empty:
         unmapped_items = unmapped_df.groupby('Clean_Name').agg({
@@ -699,81 +643,106 @@ def process_analytics(df, mapping):
         'avg_basket_value': avg_basket_value,
         'total_qty': t_qty,
         'total_rev': t_rev,
-        'total_orders': len(order_groups) if group_cols else 0,
+        'total_orders': total_orders,
         'total_cogs': total_cogs,
         'has_cogs': has_cogs,
         'gross_profit': gross_profit,
         'profit_margin': profit_margin
     }
 
-# --- UI Components ---
+# --- UI & Sidebar Components ---
 
 @st.fragment
 def render_sidebar(logo_b64=None):
     with st.sidebar:
         if not logo_b64:
             logo_b64 = load_logo()
-        logo_html = f'<img src="data:image/png;base64,{logo_b64}" style="width: 40px; height: 40px; border-radius: 8px; object-fit: contain; flex-shrink: 0;">' if logo_b64 else ''
-        st.markdown(
-            f"""
-            <a href="https://deencommerce.com" target="_blank" style="text-decoration: none; color: inherit;">
-                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px; padding-top: 2px;">
-                    {logo_html}
-                    <div style="display: flex; flex-direction: column;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <span style="font-size: 1.2rem; font-weight: 700; color: var(--primary-color, #007bff); letter-spacing: -0.01em; line-height: 1.2;">DEEN Commerce</span>
-                            <span style="font-size: 0.65rem; background: rgba(0, 123, 255, 0.12); color: var(--primary-color, #007bff); padding: 2px 7px; border-radius: 8px; font-weight: 600; text-transform: uppercase;">Suite</span>
-                        </div>
-                        <div style="font-size: 0.78rem; color: var(--text-color); opacity: 0.65; font-weight: 400; margin-top: 2px;">
-                            Category Intelligence & Performance
-                        </div>
-                    </div>
+        if logo_b64:
+            st.markdown(
+                f"""
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <img src="data:image/png;base64,{logo_b64}" width="160" style="filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1));">
                 </div>
-            </a>
-            """,
-            unsafe_allow_html=True
-        )
+                """,
+                unsafe_allow_html=True
+            )
+        else:
+            st.title("Catwise Analytics")
+            
+        st.caption("E-Commerce Fashion Intelligence & Category Reports")
         st.divider()
 
-        st.header(":material/feedback: Feedback & Debug")
-        comment = st.text_area("Report Issues:", placeholder="Category 'Polo' is incorrect...")
-        if st.button("Submit Report", icon=":material/send:"):
-            feedback_file = os.path.join(FEEDBACK_DIR, "user_feedback.json")
-            entry = {"timestamp": datetime.now().isoformat(), "comment": comment}
-            try:
-                data = []
-                if os.path.exists(feedback_file):
-                    with open(feedback_file, "r") as f: data = json.load(f)
-                data.append(entry)
-                with open(feedback_file, "w") as f: json.dump(data, f, indent=4)
-                st.success("Feedback saved!")
-            except: st.error("Failed to save.")
-        
-        st.divider()
-        if st.checkbox("View System Logs"):
-            log_path = os.path.join(FEEDBACK_DIR, "system_logs.json")
-            if os.path.exists(log_path):
-                with open(log_path, "r") as f: st.json(json.load(f)[-10:])
-            else: st.info("No logs available.")
+        with st.expander(":material/tune: Category Rule Manager", expanded=False):
+            st.caption("Add or adjust keyword matching rules:")
+            cat_list = sorted(list(CATEGORY_MAPPING.keys()))
+            selected_cat = st.selectbox("Category", cat_list)
+            
+            curr_keywords = CATEGORY_MAPPING.get(selected_cat, [])
+            st.write(f"Current keywords: `{', '.join(curr_keywords)}`")
+            
+            c_add, c_del = st.tabs(["Add", "Remove"])
+            with c_add:
+                new_kw = st.text_input("New Keyword", key="new_kw_input")
+                if st.button("Add Keyword", type="secondary"):
+                    if new_kw and new_kw.lower() not in [k.lower() for k in curr_keywords]:
+                        CATEGORY_MAPPING[selected_cat].append(new_kw.lower())
+                        with open(CATEGORIES_JSON, 'w', encoding='utf-8') as f:
+                            json.dump(CATEGORY_MAPPING, f, indent=4)
+                        st.session_state['category_rules_version'] = st.session_state.get('category_rules_version', 0) + 1
+                        st.success(f"Added '{new_kw}' to {selected_cat}!")
+                        st.rerun()
+            with c_del:
+                if curr_keywords:
+                    del_kw = st.selectbox("Select Keyword to Remove", curr_keywords)
+                    if st.button("Delete Keyword", type="secondary"):
+                        CATEGORY_MAPPING[selected_cat].remove(del_kw)
+                        with open(CATEGORIES_JSON, 'w', encoding='utf-8') as f:
+                            json.dump(CATEGORY_MAPPING, f, indent=4)
+                        st.session_state['category_rules_version'] = st.session_state.get('category_rules_version', 0) + 1
+                        st.success(f"Removed '{del_kw}'!")
+                        st.rerun()
 
-def render_footer(logo_b64):
+            if st.button("Reset Rules to Defaults", icon=":material/restart_alt:"):
+                with open(CATEGORIES_JSON, 'w', encoding='utf-8') as f:
+                    json.dump(DEFAULT_CATEGORY_MAPPING, f, indent=4)
+                st.session_state['category_rules_version'] = st.session_state.get('category_rules_version', 0) + 1
+                st.success("Reset all category rules to default!")
+                st.rerun()
+
+        with st.expander(":material/cleaning_services: Clean Items & Exclusions", expanded=False):
+            st.caption("Lines containing bundle keywords are filtered automatically:")
+            st.code("choose any | shoose any | combo | bundle | bundel", language="text")
+
+        with st.expander(":material/bug_report: Feedback & Support", expanded=False):
+            f_type = st.selectbox("Issue Type", ["Bug Report", "Feature Request", "Category Keyword Suggestion"])
+            f_text = st.text_area("Details", placeholder="Describe the issue or suggested keyword...")
+            if st.button("Submit Feedback"):
+                if f_text.strip():
+                    log_event(f"FEEDBACK_{f_type.upper().replace(' ', '_')}", f_text.strip())
+                    st.success("Thank you! Your feedback has been recorded.")
+                else:
+                    st.warning("Please enter feedback details.")
+
+def render_footer(logo_b64=None):
+    """Renders fixed sticky footer."""
+    logo_img = f'<img src="data:image/png;base64,{logo_b64}" class="small-logo">' if logo_b64 else '🐾'
     footer_html = f"""
-    <div style="height: 120px;"></div> <!-- Spacer to prevent content overlap -->
     <div class="sticky-footer">
         <div class="footer-content-inner">
-            <span>© {datetime.now().year} Sajid Islam. All rights reserved. | </span>
+            <span>Powered by</span>
             <div class="brand-wrapper">
-                <span style="opacity: 0.85;">Powered by</span>
-                <img src="data:image/png;base64,{logo_b64}" class="small-logo">
-                <span class="brand-name">DEEN Commerce Ltd.</span>
+                {logo_img}
+                <span class="brand-name">Catwise Analytics</span>
             </div>
         </div>
     </div>
     """
     st.markdown(footer_html, unsafe_allow_html=True)
 
+# --- Excel Report Generator ---
+
 def generate_excel_report(sheet_dict):
-    """Generates an optimized, beautifully styled Excel workbook with fast row iteration."""
+    """Generates an optimized, beautifully styled multi-sheet Excel workbook with native number formats."""
     buf = BytesIO()
     with pd.ExcelWriter(buf, engine='openpyxl') as writer:
         for sheet_name, dframe in sheet_dict.items():
@@ -806,6 +775,7 @@ def generate_excel_report(sheet_dict):
                 for col in dframe.columns
             ]
             is_numeric_col = [any(x in col for x in ['Qty', 'Price', 'Amount', 'COGS']) for col in dframe.columns]
+            is_margin_col = ['Margin' in col or '%' in col for col in dframe.columns]
             
             # Auto-adjust column widths
             for i, col_name in enumerate(dframe.columns):
@@ -813,7 +783,7 @@ def generate_excel_report(sheet_dict):
                 content_len = dframe[col_name].astype(str).str.len().max() if not dframe.empty else 0
                 ws.column_dimensions[col_letter].width = max(int(content_len), len(str(col_name))) + 3
             
-            # Fast single-pass row styling using iter_rows
+            # Fast single-pass row styling
             for row_cells in ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=1, max_col=len(dframe.columns)):
                 first_cell_str = str(row_cells[0].value).upper()
                 is_total = 'TOTAL' in first_cell_str
@@ -822,6 +792,8 @@ def generate_excel_report(sheet_dict):
                     cell.alignment = col_alignments[idx]
                     if is_numeric_col[idx]:
                         cell.number_format = '#,##0'
+                    elif is_margin_col[idx]:
+                        cell.number_format = '0.0"%"'
                     if is_total:
                         cell.font = Font(bold=True)
                         cell.fill = total_fill
@@ -836,37 +808,31 @@ def main():
     
     logo_b64 = load_logo()
     render_sidebar(logo_b64)
-    
-    st.title(":material/monitoring: Sales Performance Dashboard")
-    
+
+    st.title("Sales & Category Intelligence", anchor=False)
+    st.caption("Upload order reports to visualize volume, revenue, profit margins, and category drilldowns.")
+
     uploaded_file = st.file_uploader("Upload Sales Data (Excel or CSV)", type=['xlsx', 'csv'])
-    
-    if uploaded_file:
+
+    if uploaded_file is not None:
         try:
-            # Check if file changed to reset state
-            file_key = f"{uploaded_file.name}_{uploaded_file.size}"
+            file_bytes = uploaded_file.getvalue()
+            file_key = f"{uploaded_file.name}_{len(file_bytes)}"
+            
             if st.session_state.get('current_file_key') != file_key:
                 st.session_state['current_file_key'] = file_key
                 st.session_state['results'] = None
 
-            file_bytes = uploaded_file.getvalue()
             df = load_data(file_bytes, uploaded_file.name)
-            st.success(f"Attached: {uploaded_file.name}")
-            
-            with st.expander("Preview Data", icon=":material/visibility:", expanded=False):
-                st.dataframe(df.head(10), width="stretch")
-
-            # Column Mapping Section
             auto_cols = find_columns(df)
             all_cols = list(df.columns)
-            mandatory_keys = ['name', 'cost', 'qty']
-            is_mapped = all(k in auto_cols for k in mandatory_keys)
             
             def get_idx(key):
-                return all_cols.index(auto_cols[key]) if key in auto_cols else 0
+                col_name = auto_cols.get(key)
+                return all_cols.index(col_name) if col_name in all_cols else 0
 
             with st.container(border=True):
-                st.subheader(":material/tune: Verify Column Mapping", anchor=False)
+                is_mapped = all(k in auto_cols for k in ['name', 'cost', 'qty'])
                 if is_mapped:
                     detected_extra = []
                     if 'cogs' in auto_cols:
@@ -913,7 +879,6 @@ def main():
                     profit_val = results.get('gross_profit', results['total_rev'] - cogs_val)
                     margin_pct = results.get('profit_margin', (profit_val / results['total_rev'] * 100) if results['total_rev'] > 0 else 0)
                     
-                    # In-line % margin with Gross Revenue; all cards uniform size without secondary rows
                     if has_basket:
                         m1, m2, m3, m4, m5 = st.columns(5)
                     else:
@@ -923,7 +888,10 @@ def main():
                     m2.metric("Units Sold", f"{results['total_qty']:,.0f}", border=True)
                     m3.metric(
                         "Gross Revenue", 
-                        f"TK {results['total_rev']:,.0f} ({margin_pct:.1f}%)", 
+                        f"TK {results['total_rev']:,.0f}", 
+                        delta=f"({margin_pct:.1f}%)",
+                        delta_arrow="off",
+                        delta_color="normal",
                         border=True, 
                         help=f"Gross Revenue: TK {results['total_rev']:,.0f} | Margin: {margin_pct:.1f}%\nTotal COGS: TK {cogs_val:,.0f} | Gross Profit: TK {profit_val:,.0f}"
                     )
@@ -948,11 +916,8 @@ def main():
                 # Visuals
                 v1, v2 = st.columns(2)
                 
-                # Sort revenue for pie chart and quantity for bar chart (big to small)
                 summ_sorted = results['summary'].sort_values('Total Amount', ascending=False)
                 summ_qty_sorted = results['summary'].sort_values('Total Qty', ascending=False)
-                
-                # Synchronized color map so each category has the exact same color in both charts
                 cat_color_map = get_category_color_map(results['summary']['Category'].unique())
                 
                 with v1:
@@ -965,6 +930,11 @@ def main():
                             color='Category', 
                             hole=0.5, 
                             color_discrete_map=cat_color_map
+                        )
+                        fig_pie.update_traces(
+                            marker=dict(
+                                line=dict(color='#000038', width=3)
+                            )
                         )
                         fig_pie.update_layout(
                             paper_bgcolor='rgba(0,0,0,0)',
@@ -997,15 +967,13 @@ def main():
                 t1, t2, t3 = st.tabs([":material/table_chart: Category Summary", ":material/payments: Price-wise Category", ":material/inventory_2: Category-wise Product"])
                 
                 df_breakdown = results['summary'].sort_values('Category', ascending=True).copy()
-                
-                # Add Total Sales Row
                 total_qty = df_breakdown['Total Qty'].sum()
                 total_amount = df_breakdown['Total Amount'].sum()
                 
-                # Append row directly (using loc to avoid append/concat warnings)
                 if results.get('has_cogs'):
                     total_cogs_sum = df_breakdown['Total COGS'].sum()
-                    df_breakdown.loc[len(df_breakdown) + 1] = ['TOTAL SALES (Summary)', total_qty, total_amount, total_cogs_sum]
+                    total_margin_pct = round(((total_amount - total_cogs_sum) / total_amount * 100), 1) if total_amount > 0 else 0.0
+                    df_breakdown.loc[len(df_breakdown) + 1] = ['TOTAL SALES (Summary)', total_qty, total_amount, total_cogs_sum, total_margin_pct]
                 else:
                     df_breakdown.loc[len(df_breakdown) + 1] = ['TOTAL SALES (Summary)', total_qty, total_amount]
                 
@@ -1013,15 +981,16 @@ def main():
                 
                 df_drill = results['drilldown'].sort_values(['Category', 'Price'], ascending=[True, False]).copy()
                 df_drill.columns = ['Category', 'Price', 'Qty', 'Total Amount']
-                
-                # Add Total Row
                 df_drill.loc[len(df_drill) + 1] = ['TOTAL (All Categories)', None, df_drill['Qty'].sum(), df_drill['Total Amount'].sum()]
                 df_drill.index = range(1, len(df_drill) + 1)
 
                 df_product = results['product_summary'].sort_values(['Category', 'Total Amount'], ascending=[True, False]).copy()
                 if results.get('has_cogs'):
-                    df_product.columns = ['Category', 'Product Name', 'Total Qty', 'Total Amount', 'Total COGS']
-                    df_product.loc[len(df_product) + 1] = ['TOTAL (All Products)', None, df_product['Total Qty'].sum(), df_product['Total Amount'].sum(), df_product['Total COGS'].sum()]
+                    total_prod_qty = df_product['Total Qty'].sum()
+                    total_prod_amt = df_product['Total Amount'].sum()
+                    total_prod_cogs = df_product['Total COGS'].sum()
+                    total_prod_margin = round(((total_prod_amt - total_prod_cogs) / total_prod_amt * 100), 1) if total_prod_amt > 0 else 0.0
+                    df_product.loc[len(df_product) + 1] = ['TOTAL (All Products)', None, total_prod_qty, total_prod_amt, total_prod_cogs, total_prod_margin]
                 else:
                     df_product.columns = ['Category', 'Product Name', 'Total Qty', 'Total Amount']
                     df_product.loc[len(df_product) + 1] = ['TOTAL (All Products)', None, df_product['Total Qty'].sum(), df_product['Total Amount'].sum()]
@@ -1035,8 +1004,9 @@ def main():
                         "Total Amount": st.column_config.NumberColumn("Total Revenue", format="TK %,.0f"),
                     }
                     if results.get('has_cogs'):
-                        t1_cols.append('Total COGS')
+                        t1_cols.extend(['Total COGS', 'Profit Margin %'])
                         t1_cfg["Total COGS"] = st.column_config.NumberColumn("Total COGS", format="TK %,.0f")
+                        t1_cfg["Profit Margin %"] = st.column_config.NumberColumn("Profit Margin %", format="%.1f%%")
                     st.dataframe(
                         df_breakdown[t1_cols],
                         column_config=t1_cfg,
@@ -1094,17 +1064,17 @@ def main():
                         "Total Amount": st.column_config.NumberColumn("Total Revenue", format="TK %,.0f"),
                     }
                     if results.get('has_cogs'):
-                        t3_cols.append('Total COGS')
+                        t3_cols.extend(['Total COGS', 'Profit Margin %'])
                         t3_cfg["Total COGS"] = st.column_config.NumberColumn("Total COGS", format="TK %,.0f")
-                        df_filtered_view.columns = t3_cols
+                        t3_cfg["Profit Margin %"] = st.column_config.NumberColumn("Profit Margin %", format="%.1f%%")
                         f_total_qty = df_filtered_view['Total Qty'].sum()
                         f_total_amt = df_filtered_view['Total Amount'].sum()
                         f_total_cogs = df_filtered_view['Total COGS'].sum()
+                        f_total_margin = round(((f_total_amt - f_total_cogs) / f_total_amt * 100), 1) if f_total_amt > 0 else 0.0
                         df_filtered_view.loc[len(df_filtered_view) + 1] = [
-                            f"TOTAL ({len(df_filtered_view)} items)", None, f_total_qty, f_total_amt, f_total_cogs
+                            f"TOTAL ({len(df_filtered_view)} items)", None, f_total_qty, f_total_amt, f_total_cogs, f_total_margin
                         ]
                     else:
-                        df_filtered_view.columns = t3_cols
                         f_total_qty = df_filtered_view['Total Qty'].sum()
                         f_total_amt = df_filtered_view['Total Amount'].sum()
                         df_filtered_view.loc[len(df_filtered_view) + 1] = [
@@ -1141,7 +1111,7 @@ def main():
                             hide_index=True
                         )
 
-                # Export
+                # Export Multi-sheet Workbook
                 sheet_dict = {
                     'Category Summary': df_breakdown,
                     'Price-wise Category': df_drill,

@@ -8,6 +8,10 @@ venv/
 # Streamlit
 .streamlit/
 
-# Data (Optional - remove if you want to track Excel files)
+# Runtime Logs & Feedback
+feedback/*.json
+feedback/system_logs.json
+
+# Data & Exports
 *.xlsx
 *.csv
