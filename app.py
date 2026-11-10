@@ -14,10 +14,13 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 # --- Configuration & Paths ---
 FEEDBACK_DIR = "feedback"
 CONFIG_DIR = "config"
+PRESETS_DIR = "presets"
 os.makedirs(FEEDBACK_DIR, exist_ok=True)
 os.makedirs(CONFIG_DIR, exist_ok=True)
+os.makedirs(PRESETS_DIR, exist_ok=True)
 
 CATEGORIES_JSON = os.path.join(CONFIG_DIR, "categories.json")
+LAST_MAPPING_JSON = os.path.join(CONFIG_DIR, "last_mapping.json")
 LOGO_PNG = os.path.join("assets", "deen_logo.png")
 
 # Default Category Mapping Rules
@@ -554,8 +557,138 @@ def get_product_category(name, mapping_dict=None):
         
     return 'Others'
 
+def load_presets():
+    """Loads all saved mapping presets from presets directory."""
+    presets = {}
+    if os.path.exists(PRESETS_DIR):
+        for fname in os.listdir(PRESETS_DIR):
+            if fname.endswith(".json"):
+                preset_name = fname[:-5]
+                try:
+                    with open(os.path.join(PRESETS_DIR, fname), "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        if isinstance(data, dict):
+                            presets[preset_name] = data
+                except Exception:
+                    pass
+    return presets
+
+def save_preset(preset_name, mapping):
+    """Saves a mapping preset to presets directory."""
+    os.makedirs(PRESETS_DIR, exist_ok=True)
+    clean_name = re.sub(r'[^a-zA-Z0-9_\- ]', '', str(preset_name)).strip()
+    if not clean_name:
+        return False
+    path = os.path.join(PRESETS_DIR, f"{clean_name}.json")
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(mapping, f, indent=4)
+        return True
+    except Exception:
+        return False
+
+def delete_preset(preset_name):
+    """Deletes a saved preset."""
+    clean_name = re.sub(r'[^a-zA-Z0-9_\- ]', '', str(preset_name)).strip()
+    path = os.path.join(PRESETS_DIR, f"{clean_name}.json")
+    if os.path.exists(path):
+        try:
+            os.remove(path)
+            return True
+        except Exception:
+            return False
+    return False
+
+def save_last_mapping(mapping):
+    """Saves the last used valid column mapping to preserve user preferences."""
+    try:
+        with open(LAST_MAPPING_JSON, "w", encoding="utf-8") as f:
+            json.dump(mapping, f, indent=4)
+    except Exception:
+        pass
+
+def load_last_mapping():
+    """Loads the last used column mapping preference if available."""
+    if os.path.exists(LAST_MAPPING_JSON):
+        try:
+            with open(LAST_MAPPING_JSON, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+        except Exception:
+            pass
+    return None
+
+def validate_column_mapping(df, mapping):
+    """
+    Validates user column selection before processing.
+    Ensures mandatory fields (Product Name, Unit Price, Quantity) are selected and present in df.
+    Returns: (is_valid: bool, errors: list[str], warnings: list[str])
+    """
+    errors = []
+    warnings = []
+
+    if df is None or not isinstance(df, pd.DataFrame) or df.empty:
+        errors.append("Dataset is empty. Please upload a file with sales records.")
+        return False, errors, warnings
+
+    if not isinstance(mapping, dict):
+        errors.append("Invalid mapping structure.")
+        return False, errors, warnings
+
+    actual_cols = list(df.columns)
+    required_fields = [
+        ('name', 'Product Name'),
+        ('cost', 'Unit Price'),
+        ('qty', 'Quantity')
+    ]
+
+    # Validate required columns
+    for key, label in required_fields:
+        col = mapping.get(key)
+        if not col or col == "None" or str(col).strip() == "":
+            errors.append(f"**{label}** is required. Please select a column from your file.")
+        elif col not in actual_cols:
+            errors.append(f"Column **'{col}'** assigned to **{label}** was not found in the uploaded file.")
+
+    # Check for duplicate assignments across required fields
+    mapped_reqs = {k: mapping.get(k) for k, _ in required_fields if mapping.get(k) and mapping.get(k) != "None" and mapping.get(k) in actual_cols}
+    if len(mapped_reqs) > 1:
+        seen = {}
+        for k, col in mapped_reqs.items():
+            seen.setdefault(col, []).append(k)
+        for col, keys in seen.items():
+            if len(keys) > 1:
+                labels = [dict(required_fields)[k] for k in keys]
+                warnings.append(f"Column **'{col}'** is mapped to multiple required fields ({', '.join(labels)}). Please verify distinct columns.")
+
+    # Validate numeric convertibility for cost and qty
+    for key, label in [('cost', 'Unit Price'), ('qty', 'Quantity')]:
+        col = mapping.get(key)
+        if col and col in actual_cols:
+            cleaned = clean_numeric_series(df[col])
+            if (cleaned == 0).all() and len(df) > 0:
+                warnings.append(f"Column **'{col}'** ({label}) contains no positive numerical values. Please ensure you selected the correct numerical column.")
+
+    # Validate optional fields if provided
+    optional_fields = [
+        ('cogs', 'COGS'),
+        ('date', 'Date'),
+        ('order_id', 'Order ID'),
+        ('phone', 'Phone')
+    ]
+    for key, label in optional_fields:
+        col = mapping.get(key)
+        if col and col != "None" and col not in actual_cols:
+            warnings.append(f"Optional column **'{col}'** for **{label}** is not present in the dataset.")
+
+    is_valid = len(errors) == 0
+    return is_valid, errors, warnings
+
 def find_columns(df):
     """Auto-detects required and optional columns with priority-based alias matching."""
+    if df is None or not isinstance(df, pd.DataFrame) or df.empty or len(df.columns) == 0:
+        return {}
     mapping = {
         'name': ['item name', 'product name', 'product', 'item', 'title', 'description', 'name'],
         'cost': ['unit price', 'selling price', 'item price', 'price', 'mrp', 'rate', 'item cost', 'cost'],
@@ -604,11 +737,13 @@ def find_columns(df):
 
 def clean_numeric_series(series):
     """Fast vectorized numeric cleaning removing currency, commas, and whitespace while preserving negative numbers."""
+    if series is None or len(series) == 0:
+        return pd.Series(dtype=float)
     if pd.api.types.is_numeric_dtype(series):
         return pd.to_numeric(series.fillna(0), errors='coerce').fillna(0)
     
     s_str = series.astype(str).str.strip()
-    is_paren_negative = s_str.str.startswith('(') & s_str.str.endswith(')')
+    is_paren_negative = (s_str.str.startswith('(') & s_str.str.endswith(')')) | s_str.str.contains(r'\(\s*[0-9.]+\s*\)')
     
     cleaned = s_str.str.replace(r'[^0-9.-]', '', regex=True)
     cleaned = cleaned.str.replace(r'(?!^)-', '', regex=True)
@@ -619,22 +754,63 @@ def clean_numeric_series(series):
 
 @st.cache_data(show_spinner="Loading sales data...")
 def load_data(file_bytes, filename):
-    """Loads CSV or Excel data from uploaded bytes with caching."""
-    buf = BytesIO(file_bytes)
-    if filename.lower().endswith('.csv'):
-        return pd.read_csv(buf)
-    else:
+    """Loads CSV or Excel data from uploaded bytes with caching and encoding fallbacks."""
+    if not file_bytes:
+        raise ValueError("The uploaded file is empty (0 bytes).")
+    
+    fname = filename.lower()
+    if fname.endswith('.csv'):
+        encodings = ['utf-8', 'utf-8-sig', 'cp1252', 'latin1', 'iso-8859-1']
+        last_err = None
+        for enc in encodings:
+            try:
+                buf = BytesIO(file_bytes)
+                df = pd.read_csv(buf, encoding=enc)
+                if df is not None:
+                    return df
+            except (UnicodeDecodeError, UnicodeError) as e:
+                last_err = e
+                continue
+            except Exception as e:
+                raise e
+        if last_err:
+            raise ValueError(f"Could not decode CSV file with supported encodings: {last_err}")
+    elif fname.endswith(('.xlsx', '.xls', '.xlsm')):
+        buf = BytesIO(file_bytes)
         return pd.read_excel(buf)
+    else:
+        try:
+            buf = BytesIO(file_bytes)
+            return pd.read_excel(buf)
+        except Exception:
+            buf = BytesIO(file_bytes)
+            return pd.read_csv(buf)
 
 @st.cache_data(show_spinner="Processing analytics & categorizing products...")
 def process_analytics(df, mapping):
     """Core data processing, COGS heuristics, profit margins, and metric aggregations."""
+    if df is None or not isinstance(df, pd.DataFrame) or df.empty:
+        raise ValueError("Cannot process empty dataset. Please provide a file with valid sales data rows.")
+
+    if not isinstance(mapping, dict):
+        raise ValueError("Column mapping must be provided as a dictionary.")
+
+    for req in ['name', 'cost', 'qty']:
+        col = mapping.get(req)
+        if not col or col == "None" or str(col).strip() == "":
+            raise ValueError(f"Required mapping for '{req}' is missing or not selected.")
+        if col not in df.columns:
+            raise KeyError(f"Mapped column '{col}' for '{req}' does not exist in dataframe columns.")
+
     df = df.copy()
     
     # 1. Clean Data (Vectorized)
     df['Clean_Name'] = df[mapping['name']].fillna('Unknown').astype(str)
     exclude_keywords = 'choose any|shoose any|combo|bundle|bundel'
     df = df[~df['Clean_Name'].str.contains(exclude_keywords, case=False, na=False)]
+
+    if df.empty:
+        raise ValueError("All rows were filtered out after removing bundle/combo promotions. No sales records remain to analyze.")
 
     df['Clean_Cost'] = clean_numeric_series(df[mapping['cost']])
     df['Clean_Qty'] = clean_numeric_series(df[mapping['qty']])
@@ -953,60 +1129,227 @@ def main():
 
     uploaded_file = st.file_uploader("Upload Sales Data (Excel or CSV)", type=['xlsx', 'csv'])
 
+    widget_keys = [
+        'select_col_name', 'select_col_cost', 'select_col_qty',
+        'select_col_cogs', 'select_col_date', 'select_col_order_id', 'select_col_phone'
+    ]
+
     if uploaded_file is not None:
         try:
             file_bytes = uploaded_file.getvalue()
             file_key = f"{uploaded_file.name}_{len(file_bytes)}"
-            
-            if st.session_state.get('current_file_key') != file_key:
+            is_new_file = (st.session_state.get('current_file_key') != file_key)
+
+            if is_new_file:
                 st.session_state['current_file_key'] = file_key
                 st.session_state['results'] = None
 
-            df = load_data(file_bytes, uploaded_file.name)
-            auto_cols = find_columns(df)
+            # File loading with specific exception handling (Bug #3)
+            try:
+                df = load_data(file_bytes, uploaded_file.name)
+            except pd.errors.EmptyDataError:
+                st.error("❌ The uploaded file is completely empty.")
+                log_event("FILE_ERROR", f"{uploaded_file.name}: EmptyDataError")
+                return
+            except pd.errors.ParserError as pe:
+                st.error(f"❌ Error parsing file structure: {pe}")
+                log_event("FILE_ERROR", f"{uploaded_file.name}: {pe}")
+                return
+            except UnicodeDecodeError as ue:
+                st.error(f"❌ Encoding error reading file: {ue}. Please save your CSV as standard UTF-8.")
+                log_event("FILE_ERROR", f"{uploaded_file.name}: {ue}")
+                return
+            except Exception as e:
+                st.error(f"❌ Failed to load file: {e}")
+                log_event("FILE_LOAD_ERROR", f"{uploaded_file.name}: {str(e)}")
+                return
+
+            if df is None or df.empty or len(df.columns) == 0:
+                st.error("❌ The uploaded file contains no data rows or columns. Please upload a valid sales report.")
+                return
+
             all_cols = list(df.columns)
-            
-            def get_idx(key):
-                col_name = auto_cols.get(key)
-                return all_cols.index(col_name) if col_name in all_cols else 0
+
+            # Bug #1: EXACTLY ONE Preview Data expander right after upload
+            with st.expander("🔍 Preview Data", expanded=False):
+                st.caption(f"Showing first 10 rows of {len(df):,} total rows ({len(df.columns)} columns):")
+                st.dataframe(df.head(10), use_container_width=True)
+
+            # Bug #2: Session State Initialization & Preservation
+            needs_init = is_new_file or any(k not in st.session_state for k in widget_keys)
+            if needs_init:
+                auto_cols = find_columns(df)
+                last_pref = load_last_mapping() or {}
+                
+                # Prioritize last mapping if matching columns exist, otherwise auto_cols
+                init_name = last_pref.get('name') if (last_pref.get('name') in all_cols) else auto_cols.get('name')
+                if init_name not in all_cols:
+                    init_name = all_cols[0] if all_cols else ""
+                st.session_state['select_col_name'] = init_name
+
+                init_cost = last_pref.get('cost') if (last_pref.get('cost') in all_cols) else auto_cols.get('cost')
+                if init_cost not in all_cols:
+                    init_cost = all_cols[1] if len(all_cols) > 1 else (all_cols[0] if all_cols else "")
+                st.session_state['select_col_cost'] = init_cost
+
+                init_qty = last_pref.get('qty') if (last_pref.get('qty') in all_cols) else auto_cols.get('qty')
+                if init_qty not in all_cols:
+                    init_qty = all_cols[2] if len(all_cols) > 2 else (all_cols[0] if all_cols else "")
+                st.session_state['select_col_qty'] = init_qty
+
+                for opt_k in ['cogs', 'date', 'order_id', 'phone']:
+                    init_val = last_pref.get(opt_k) if (last_pref.get(opt_k) in all_cols) else auto_cols.get(opt_k)
+                    st.session_state[f'select_col_{opt_k}'] = init_val if (init_val in all_cols) else "None"
+
+            # Fallback guard if column list changed
+            if st.session_state.get('select_col_name') not in all_cols:
+                st.session_state['select_col_name'] = all_cols[0] if all_cols else ""
+            if st.session_state.get('select_col_cost') not in all_cols:
+                st.session_state['select_col_cost'] = all_cols[1] if len(all_cols) > 1 else (all_cols[0] if all_cols else "")
+            if st.session_state.get('select_col_qty') not in all_cols:
+                st.session_state['select_col_qty'] = all_cols[2] if len(all_cols) > 2 else (all_cols[0] if all_cols else "")
+            for opt_k in ['cogs', 'date', 'order_id', 'phone']:
+                opt_val = st.session_state.get(f'select_col_{opt_k}')
+                if opt_val != "None" and opt_val not in all_cols:
+                    st.session_state[f'select_col_{opt_k}'] = "None"
 
             with st.container(border=True):
-                is_mapped = all(k in auto_cols for k in ['name', 'cost', 'qty'])
-                if is_mapped:
-                    detected_extra = []
-                    if 'cogs' in auto_cols:
-                        detected_extra.append("COGS")
-                    if 'date' in auto_cols:
-                        detected_extra.append("Date")
-                    extra_str = f" (including {', '.join(detected_extra)})" if detected_extra else ""
-                    st.caption(f":material/check_circle: Mandatory columns{extra_str} were auto-detected. Adjust if needed:")
-                else:
-                    st.caption(":material/info: Please match the required columns from your uploaded file:")
+                top_c1, top_c2 = st.columns([1, 2])
+                with top_c1:
+                    if st.button("🔄 Auto-Detect Columns", help="Re-run intelligent column detection on this file"):
+                        detected = find_columns(df)
+                        st.session_state['select_col_name'] = detected.get('name', all_cols[0] if all_cols else "")
+                        st.session_state['select_col_cost'] = detected.get('cost', all_cols[1] if len(all_cols) > 1 else (all_cols[0] if all_cols else ""))
+                        st.session_state['select_col_qty'] = detected.get('qty', all_cols[2] if len(all_cols) > 2 else (all_cols[0] if all_cols else ""))
+                        st.session_state['select_col_cogs'] = detected.get('cogs', "None") if detected.get('cogs') in all_cols else "None"
+                        st.session_state['select_col_date'] = detected.get('date', "None") if detected.get('date') in all_cols else "None"
+                        st.session_state['select_col_order_id'] = detected.get('order_id', "None") if detected.get('order_id') in all_cols else "None"
+                        st.session_state['select_col_phone'] = detected.get('phone', "None") if detected.get('phone') in all_cols else "None"
+                        st.rerun()
+
+                with top_c2:
+                    with st.expander("💾 Presets & Preferences", expanded=False):
+                        presets = load_presets()
+                        preset_list = list(presets.keys())
+                        if preset_list:
+                            p_col1, p_col2, p_col3 = st.columns([2, 1, 1])
+                            with p_col1:
+                                selected_preset = st.selectbox("Load Preset", ["None"] + preset_list, key="preset_load_select")
+                            with p_col2:
+                                st.write("")
+                                if selected_preset != "None" and st.button("Apply"):
+                                    p_map = presets[selected_preset]
+                                    if p_map.get('name') in all_cols: st.session_state['select_col_name'] = p_map['name']
+                                    if p_map.get('cost') in all_cols: st.session_state['select_col_cost'] = p_map['cost']
+                                    if p_map.get('qty') in all_cols: st.session_state['select_col_qty'] = p_map['qty']
+                                    if p_map.get('cogs') in all_cols: st.session_state['select_col_cogs'] = p_map['cogs']
+                                    if p_map.get('date') in all_cols: st.session_state['select_col_date'] = p_map['date']
+                                    if p_map.get('order_id') in all_cols: st.session_state['select_col_order_id'] = p_map['order_id']
+                                    if p_map.get('phone') in all_cols: st.session_state['select_col_phone'] = p_map['phone']
+                                    st.success(f"Applied preset '{selected_preset}'")
+                                    st.rerun()
+                            with p_col3:
+                                st.write("")
+                                if selected_preset != "None" and st.button("Delete"):
+                                    if delete_preset(selected_preset):
+                                        st.success(f"Deleted preset '{selected_preset}'")
+                                        st.rerun()
+                        else:
+                            st.caption("No saved presets yet.")
+
+                        sp_c1, sp_c2 = st.columns([2, 1])
+                        with sp_c1:
+                            save_name = st.text_input("Save Current Mapping as Preset", placeholder="e.g. Monthly Sales Format", key="save_preset_name")
+                        with sp_c2:
+                            st.write("")
+                            if st.button("Save Preset"):
+                                if save_name.strip():
+                                    to_save = {
+                                        'name': st.session_state.get('select_col_name'),
+                                        'cost': st.session_state.get('select_col_cost'),
+                                        'qty': st.session_state.get('select_col_qty'),
+                                        'cogs': st.session_state.get('select_col_cogs') if st.session_state.get('select_col_cogs') != "None" else None,
+                                        'date': st.session_state.get('select_col_date') if st.session_state.get('select_col_date') != "None" else None,
+                                        'order_id': st.session_state.get('select_col_order_id') if st.session_state.get('select_col_order_id') != "None" else None,
+                                        'phone': st.session_state.get('select_col_phone') if st.session_state.get('select_col_phone') != "None" else None,
+                                    }
+                                    if save_preset(save_name.strip(), to_save):
+                                        st.success(f"Preset '{save_name.strip()}' saved!")
+                                        st.rerun()
+                                    else:
+                                        st.error("Failed to save preset.")
+                                else:
+                                    st.warning("Please enter a preset name.")
 
                 st.markdown("**:material/check_circle: Required Fields** *(Mandatory for calculations)*")
                 rc1, rc2, rc3 = st.columns(3)
-                m_name = rc1.selectbox("Product Name *", all_cols, index=get_idx('name'), help="Column containing the product or item description")
-                m_cost = rc2.selectbox("Unit Price *", all_cols, index=get_idx('cost'), help="Column containing unit price or cost")
-                m_qty = rc3.selectbox("Quantity *", all_cols, index=get_idx('qty'), help="Column containing quantity sold")
+                m_name = rc1.selectbox("Product Name *", all_cols, key="select_col_name", help="Column containing the product or item description")
+                m_cost = rc2.selectbox("Unit Price *", all_cols, key="select_col_cost", help="Column containing unit price or cost")
+                m_qty = rc3.selectbox("Quantity *", all_cols, key="select_col_qty", help="Column containing quantity sold")
 
                 st.markdown("**:material/add_circle: Optional Dimensions** *(Enables timeframe, basket size & COGS metrics)*")
                 oc1, oc2, oc3, oc4 = st.columns(4)
-                m_cogs = oc1.selectbox("COGS (Opt)", ["None"] + all_cols, index=get_idx('cogs')+1 if 'cogs' in auto_cols else 0, help="Column containing Cost of Goods Sold (per unit or total)")
-                m_date = oc2.selectbox("Date (Opt)", ["None"] + all_cols, index=get_idx('date')+1 if 'date' in auto_cols else 0, help="Order date column for report timeframe")
-                m_order = oc3.selectbox("Order ID (Opt)", ["None"] + all_cols, index=get_idx('order_id')+1 if 'order_id' in auto_cols else 0, help="Order number or invoice ID for basket size")
-                m_phone = oc4.selectbox("Phone (Opt)", ["None"] + all_cols, index=get_idx('phone')+1 if 'phone' in auto_cols else 0, help="Customer contact for multi-item order grouping")
+                m_cogs = oc1.selectbox("COGS (Opt)", ["None"] + all_cols, key="select_col_cogs", help="Column containing Cost of Goods Sold (per unit or total)")
+                m_date = oc2.selectbox("Date (Opt)", ["None"] + all_cols, key="select_col_date", help="Order date column for report timeframe")
+                m_order = oc3.selectbox("Order ID (Opt)", ["None"] + all_cols, key="select_col_order_id", help="Order number or invoice ID for basket size")
+                m_phone = oc4.selectbox("Phone (Opt)", ["None"] + all_cols, key="select_col_phone", help="Customer contact for multi-item order grouping")
 
                 mapping = {
-                    'name': m_name, 'cost': m_cost, 'qty': m_qty,
+                    'name': m_name,
+                    'cost': m_cost,
+                    'qty': m_qty,
                     'cogs': m_cogs if m_cogs != "None" else None,
                     'date': m_date if m_date != "None" else None,
                     'order_id': m_order if m_order != "None" else None,
                     'phone': m_phone if m_phone != "None" else None
                 }
+                st.session_state['current_mapping'] = mapping
+
+                # Bug #4: Proactive Input Validation
+                is_valid, validation_errors, validation_warnings = validate_column_mapping(df, mapping)
+
+                if validation_errors:
+                    for err in validation_errors:
+                        st.error(f":material/error: {err}")
+
+                if validation_warnings:
+                    for warn in validation_warnings:
+                        st.warning(f":material/warning: {warn}")
+
+                if is_valid and not validation_warnings:
+                    detected_extra = []
+                    if mapping.get('cogs'): detected_extra.append("COGS")
+                    if mapping.get('date'): detected_extra.append("Date")
+                    if mapping.get('order_id'): detected_extra.append("Order ID")
+                    if mapping.get('phone'): detected_extra.append("Phone")
+                    extra_str = f" (including {', '.join(detected_extra)})" if detected_extra else ""
+                    st.caption(f":material/check_circle: Mandatory columns{extra_str} are ready. Adjust if needed:")
 
                 st.write("")
-                if st.button("Generate Analytics", icon=":material/analytics:", type="primary"):
-                    st.session_state['results'] = process_analytics(df, mapping)
+                # Bug #4: Disable button if validation fails
+                if st.button("Generate Analytics", icon=":material/analytics:", type="primary", disabled=not is_valid):
+                    if not is_valid:
+                        st.error("Please resolve the column mapping errors above before generating analytics.")
+                    else:
+                        # Bug #3: Comprehensive Error Handling
+                        try:
+                            with st.spinner("Processing analytics & categorizing products..."):
+                                results = process_analytics(df, mapping)
+                                st.session_state['results'] = results
+                                save_last_mapping(mapping)
+                                st.success("Analytics generated successfully!")
+                                st.rerun()
+                        except ValueError as ve:
+                            st.error(f"❌ Data Validation Error: {ve}")
+                            log_event("VALIDATION_ERROR", str(ve))
+                        except KeyError as ke:
+                            st.error(f"❌ Missing Column Error: Column '{ke}' was not found in dataset.")
+                            log_event("KEY_ERROR", str(ke))
+                        except Exception as pe:
+                            st.error(f"❌ Processing Error: {pe}")
+                            with st.expander("Technical Error Details"):
+                                st.exception(pe)
+                            log_event("CRASH", str(pe))
 
             results = st.session_state.get('results')
             if results is not None:
@@ -1257,16 +1600,25 @@ def main():
                     'Category-wise Product': df_product
                 }
 
-                excel_data = generate_excel_report(sheet_dict)
-                fname = f"Sales_Report_{results['timeframe']}.xlsx"
-                st.download_button("Download Report", data=excel_data, file_name=fname, icon=":material/download:")
+                try:
+                    excel_data = generate_excel_report(sheet_dict)
+                    fname = f"Sales_Report_{results['timeframe']}.xlsx"
+                    st.download_button("Download Report", data=excel_data, file_name=fname, icon=":material/download:")
+                except Exception as ex_err:
+                    st.error(f"❌ Error generating Excel export: {ex_err}")
+                    log_event("EXCEL_GEN_ERROR", str(ex_err))
                 
         except Exception as e:
-            st.error(f"Processing Error: {e}")
+            st.error(f"❌ Unexpected Error: {e}")
+            with st.expander("Technical Error Details"):
+                st.exception(e)
             log_event("CRASH", str(e))
     else:
         st.session_state['current_file_key'] = None
         st.session_state['results'] = None
+        st.session_state['current_mapping'] = None
+        for k in widget_keys:
+            st.session_state.pop(k, None)
 
     render_footer(logo_b64)
 

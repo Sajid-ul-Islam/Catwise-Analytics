@@ -11,6 +11,7 @@ venv/
 # Runtime Logs & Feedback
 feedback/*.json
 feedback/system_logs.json
+config/last_mapping.json
 
 # Data & Exports
 *.xlsx
