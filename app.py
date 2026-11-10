@@ -73,23 +73,52 @@ def load_category_mapping():
 
 CATEGORY_MAPPING = load_category_mapping()
 
-# Synchronized Vibrant Chart Palette System
-VIBRANT_PALETTE = [
-    '#2563EB', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4',
-    '#F97316', '#14B8A6', '#6366F1', '#EF4444', '#84CC16', '#D946EF',
-    '#0EA5E9', '#F43F5E', '#EAB308', '#3B82F6', '#059669', '#A855F7',
-    '#FB923C', '#2DD4BF', '#FB7185', '#4ADE80', '#38BDF8', '#C084FC',
-    '#F87171', '#34D399', '#FBBF24', '#818CF8', '#F472B6', '#22D3EE',
-    '#A3E635', '#E879F9', '#60A5FA', '#1E40AF', '#EA580C', '#0D9488',
-    '#9333EA', '#BE123C', '#CA8A04', '#4F46E5'
+# Synchronized Warm Harmony Chart Palette (Orange, Yellow, Green, Red focus)
+WARM_HARMONY_PALETTE = [
+    # Alternating high-contrast cycle across Orange, Green, Yellow, and Red
+    '#F97316',  # Bright Vibrant Orange
+    '#10B981',  # Crisp Emerald Green
+    '#F59E0B',  # Warm Amber Yellow
+    '#EF4444',  # Bright Crimson Red
+    '#84CC16',  # Lime Green
+    '#FB923C',  # Tangerine Orange
+    '#EAB308',  # Golden Yellow
+    '#DC2626',  # Ruby Red
+    '#22C55E',  # Fresh Leaf Green
+    '#EA580C',  # Deep Orange
+    '#FACC15',  # Sunny Yellow
+    '#F43F5E',  # Coral Rose Red
+    '#16A34A',  # Forest Green
+    '#D97706',  # Honey Amber
+    '#FBBF24',  # Bright Gold
+    '#E11D48',  # Deep Rose Red
+    '#059669',  # Deep Jade Green
+    '#FF7A00',  # Neon Orange
+    '#CA8A04',  # Mustard Gold
+    '#B91C1C',  # Dark Burgundy Red
+    '#4ADE80',  # Light Spring Green
+    '#FF9F43',  # Apricot Orange
+    '#FDE047',  # Soft Yellow
+    '#FB7185',  # Warm Salmon Red
+    '#65A30D',  # Olive Lime
+    '#C2410C',  # Rust Orange
+    '#E5A100',  # Warm Ochre
+    '#991B1B',  # Wine Red
+    '#15803D',  # Pine Green
+    '#FF8F00',  # Marigold Orange
+    '#FECA57',  # Sun Yellow
+    '#EE5253',  # Coral Red
+    '#2ED573',  # Mint Green
+    '#FA8231',  # Pumpkin Orange
+    '#F7B731',  # Muted Yellow
+    '#EB3B5A',  # Strawberry Red
+    '#1DD1A1',  # Sea Green
+    '#E65100',  # Burnt Orange
+    '#FFE066',  # Pale Yellow
+    '#FF4757',  # Watermelon Red
 ]
 
-CATEGORY_PALETTE = (
-    VIBRANT_PALETTE +
-    list(px.colors.qualitative.Bold) +
-    list(px.colors.qualitative.Vivid) +
-    list(px.colors.qualitative.Prism)
-)
+CATEGORY_PALETTE = WARM_HARMONY_PALETTE
 
 ALL_KNOWN_CATEGORIES = sorted(list(set(
     list(DEFAULT_CATEGORY_MAPPING.keys()) +
@@ -1415,7 +1444,7 @@ def main():
                         )
                         fig_pie.update_traces(
                             marker=dict(
-                                line=dict(color='#000038', width=3)
+                                line=dict(color='white', width=2.5)
                             )
                         )
                         fig_pie.update_layout(
