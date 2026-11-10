@@ -70,31 +70,42 @@ def load_category_mapping():
 
 CATEGORY_MAPPING = load_category_mapping()
 
-# Synchronized Chart Palette System
+# Synchronized Vibrant Chart Palette System
+VIBRANT_PALETTE = [
+    '#2563EB', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4',
+    '#F97316', '#14B8A6', '#6366F1', '#EF4444', '#84CC16', '#D946EF',
+    '#0EA5E9', '#F43F5E', '#EAB308', '#3B82F6', '#059669', '#A855F7',
+    '#FB923C', '#2DD4BF', '#FB7185', '#4ADE80', '#38BDF8', '#C084FC',
+    '#F87171', '#34D399', '#FBBF24', '#818CF8', '#F472B6', '#22D3EE',
+    '#A3E635', '#E879F9', '#60A5FA', '#1E40AF', '#EA580C', '#0D9488',
+    '#9333EA', '#BE123C', '#CA8A04', '#4F46E5'
+]
+
 CATEGORY_PALETTE = (
-    px.colors.qualitative.Plotly +
-    px.colors.qualitative.D3 +
-    px.colors.qualitative.G10 +
-    px.colors.qualitative.T10 +
-    px.colors.qualitative.Alphabet +
-    px.colors.qualitative.Dark24
+    VIBRANT_PALETTE +
+    list(px.colors.qualitative.Bold) +
+    list(px.colors.qualitative.Vivid) +
+    list(px.colors.qualitative.Prism)
 )
 
-ALL_KNOWN_CATEGORIES = sorted(
+ALL_KNOWN_CATEGORIES = sorted(list(set(
     list(DEFAULT_CATEGORY_MAPPING.keys()) +
     ['FS T-Shirt', 'T-Shirt', 'FS Shirt', 'Casual Shirt', 'Others']
-)
+)))
 
 CATEGORY_COLOR_MAP = {
     cat: CATEGORY_PALETTE[i % len(CATEGORY_PALETTE)]
     for i, cat in enumerate(ALL_KNOWN_CATEGORIES)
 }
+CATEGORY_COLOR_MAP['Others'] = '#94A3B8'
 
 def get_category_color_map(categories):
-    """Returns a deterministic, consistent color mapping for any subset of categories."""
+    """Returns a deterministic, consistent vibrant color mapping for any subset of categories."""
     color_map = {}
     for cat in sorted(categories):
-        if cat in CATEGORY_COLOR_MAP:
+        if cat == 'Others':
+            color_map[cat] = '#94A3B8'
+        elif cat in CATEGORY_COLOR_MAP:
             color_map[cat] = CATEGORY_COLOR_MAP[cat]
         else:
             idx = abs(hash(cat)) % len(CATEGORY_PALETTE)
@@ -122,20 +133,22 @@ def apply_custom_styles():
 
         /* Theme Color Variables */
         :root {
-            --primary-color: #007BFF;
+            --primary-color: #2563EB;
             --background-color: #ffffff;
-            --secondary-background-color: #f8f9fa;
-            --text-color: #212529;
-            --border-color: #e9ecef;
+            --secondary-background-color: #f8fafc;
+            --text-color: #0f172a;
+            --text-muted: #475569;
+            --card-border: #e2e8f0;
         }
 
         @media (prefers-color-scheme: dark) {
             :root {
-                --primary-color: #007BFF;
+                --primary-color: #3B82F6;
                 --background-color: #0e1117;
-                --secondary-background-color: #1a1a1a;
-                --text-color: #f8f9fa;
-                --border-color: #333333;
+                --secondary-background-color: #1e2430;
+                --text-color: #f8fafc;
+                --text-muted: #cbd5e1;
+                --card-border: rgba(255, 255, 255, 0.16);
             }
         }
 
@@ -144,10 +157,6 @@ def apply_custom_styles():
             font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
         }
         .main { background-color: transparent; }
-        
-        h1, h2, h3, h4, h5, h6, p, span, label, .stMarkdown {
-            color: var(--text-color) !important;
-        }
 
         /* Uniform Column & Card Dimensions */
         div[data-testid="column"] {
@@ -163,13 +172,13 @@ def apply_custom_styles():
             height: 100% !important;
         }
 
-        /* Metric Styling - Identical Uniform Height, Baseline Alignment & Responsive Font */
+        /* Metric Styling - Identical Uniform Height, Baseline Alignment & High Contrast */
         div[data-testid="stMetric"] { 
             background-color: var(--secondary-background-color) !important; 
             padding: 16px 16px !important; 
             border-radius: 16px !important; 
             box-shadow: 0 4px 15px rgba(0,0,0,0.05) !important;
-            border: 1px solid rgba(128, 128, 128, 0.15) !important;
+            border: 1px solid var(--card-border) !important;
             transition: all 0.3s ease !important;
             height: 120px !important;
             min-height: 120px !important;
@@ -184,7 +193,7 @@ def apply_custom_styles():
         
         div[data-testid="stMetric"]:hover {
             transform: translateY(-4px) !important;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.1) !important;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.12) !important;
             border-color: var(--primary-color) !important;
         }
 
@@ -194,8 +203,7 @@ def apply_custom_styles():
             font-weight: 600 !important;
             font-size: 0.95rem !important;
             margin-bottom: 6px !important;
-            opacity: 0.85 !important;
-            color: var(--text-color) !important;
+            color: var(--text-muted) !important;
             white-space: nowrap !important;
             overflow: hidden !important;
             text-overflow: ellipsis !important;
@@ -214,16 +222,16 @@ def apply_custom_styles():
             line-height: 1.2 !important;
         }
 
-        /* In-Line Smaller Margin % in Metric Card */
+        /* In-Line Smaller Margin % in Metric Card - High Contrast Green */
         [data-testid="stMetricDelta"],
         [data-testid="stMetricDelta"] > div,
         [data-testid="stMetricDelta"] span {
             display: inline-flex !important;
             align-items: baseline !important;
             margin-left: 6px !important;
-            font-size: 0.80rem !important;
-            font-weight: 600 !important;
-            opacity: 0.9 !important;
+            font-size: 0.82rem !important;
+            font-weight: 700 !important;
+            color: #10b981 !important;
             background: transparent !important;
             padding: 0 !important;
             line-height: 1.2 !important;
@@ -241,13 +249,6 @@ def apply_custom_styles():
             stroke-linejoin: round !important;
         }
 
-        @media (prefers-color-scheme: dark) {
-            div[data-testid="stPlotlyChart"] .js-plotly-plot .slice path,
-            div[data-testid="stPlotlyChart"] .js-plotly-plot path.surface {
-                stroke: #0e1117 !important;
-            }
-        }
-
         /* UI Components - Inputs & Selectboxes */
         div[data-testid="stSelectbox"] > div, 
         div[data-testid="stTextInput"] > div,
@@ -255,7 +256,7 @@ def apply_custom_styles():
             background-color: var(--secondary-background-color) !important;
             color: var(--text-color) !important;
             border-radius: 12px !important;
-            border: 1px solid rgba(128, 128, 128, 0.2) !important;
+            border: 1px solid var(--card-border) !important;
         }
 
         /* Buttons - High Contrast Primary */
@@ -276,12 +277,13 @@ def apply_custom_styles():
 
         /* Tabs & Dividers */
         div[data-testid="stTabs"] button {
-            color: var(--text-color) !important;
-            opacity: 0.7;
+            color: var(--text-muted) !important;
+            opacity: 0.85;
         }
         div[data-testid="stTabs"] button[aria-selected="true"] {
             color: var(--primary-color) !important;
             opacity: 1;
+            font-weight: 700 !important;
             border-bottom: 2px solid var(--primary-color) !important;
         }
         hr { border-color: rgba(128, 128, 128, 0.2) !important; }
@@ -289,7 +291,7 @@ def apply_custom_styles():
         /* Expander & Notifications */
         div[data-testid="stExpander"], div[data-testid="stNotification"] {
             background-color: var(--secondary-background-color) !important;
-            border: 1px solid rgba(128, 128, 128, 0.15) !important;
+            border: 1px solid var(--card-border) !important;
             border-radius: 14px !important;
             color: var(--text-color) !important;
         }
@@ -318,16 +320,112 @@ def apply_custom_styles():
             box-shadow: 0 -5px 25px rgba(0,0,0,0.08);
         }
 
+        /* High-Contrast Dark View Styling (OS dark mode) */
         @media (prefers-color-scheme: dark) {
+            body, .stApp {
+                color: #f8fafc !important;
+            }
+            h1, h2, h3, h4, h5, h6 {
+                color: #ffffff !important;
+            }
+            p, span, label, .stMarkdown {
+                color: #f1f5f9 !important;
+            }
+            .stCaption, [data-testid="stCaptionContainer"] {
+                color: #cbd5e1 !important;
+            }
+            div[data-testid="stMetric"] {
+                background-color: #1e2430 !important;
+                border: 1px solid rgba(255, 255, 255, 0.18) !important;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.3) !important;
+            }
+            [data-testid="stMetricLabel"] {
+                color: #cbd5e1 !important;
+            }
+            [data-testid="stMetricValue"], [data-testid="stMetricValue"] > div {
+                color: #ffffff !important;
+            }
+            [data-testid="stMetricDelta"], [data-testid="stMetricDelta"] > div, [data-testid="stMetricDelta"] span {
+                color: #34d399 !important;
+            }
+            div[data-testid="stSelectbox"] > div, 
+            div[data-testid="stTextInput"] > div,
+            div[data-testid="stTextArea"] > div {
+                background-color: #1e2430 !important;
+                color: #f8fafc !important;
+                border: 1px solid rgba(255, 255, 255, 0.25) !important;
+            }
+            div[data-testid="stExpander"], div[data-testid="stNotification"] {
+                background-color: #1e2430 !important;
+                border: 1px solid rgba(255, 255, 255, 0.18) !important;
+                color: #f8fafc !important;
+            }
             .sticky-footer {
                 background-color: #0e1117 !important;
-                color: #f8f9fa !important;
+                color: #f8fafc !important;
+                border-top: 1px solid rgba(255, 255, 255, 0.18) !important;
             }
             .brand-name {
-                color: #f8f9fa !important;
+                color: #f8fafc !important;
+            }
+            div[data-testid="stPlotlyChart"] .js-plotly-plot .slice path,
+            div[data-testid="stPlotlyChart"] .js-plotly-plot path.surface {
+                stroke: #0e1117 !important;
             }
         }
 
+        /* Streamlit In-App Dark Theme Overrides (when toggled via Streamlit menu) */
+        [data-theme="dark"] body, [data-theme="dark"] .stApp {
+            color: #f8fafc !important;
+        }
+        [data-theme="dark"] h1, [data-theme="dark"] h2, [data-theme="dark"] h3,
+        [data-theme="dark"] h4, [data-theme="dark"] h5, [data-theme="dark"] h6 {
+            color: #ffffff !important;
+        }
+        [data-theme="dark"] p, [data-theme="dark"] span, [data-theme="dark"] label, [data-theme="dark"] .stMarkdown {
+            color: #f1f5f9 !important;
+        }
+        [data-theme="dark"] .stCaption, [data-theme="dark"] [data-testid="stCaptionContainer"] {
+            color: #cbd5e1 !important;
+        }
+        [data-theme="dark"] div[data-testid="stMetric"] {
+            background-color: #1e2430 !important;
+            border: 1px solid rgba(255, 255, 255, 0.18) !important;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3) !important;
+        }
+        [data-theme="dark"] [data-testid="stMetricLabel"] {
+            color: #cbd5e1 !important;
+        }
+        [data-theme="dark"] [data-testid="stMetricValue"], [data-theme="dark"] [data-testid="stMetricValue"] > div {
+            color: #ffffff !important;
+        }
+        [data-theme="dark"] [data-testid="stMetricDelta"], [data-theme="dark"] [data-testid="stMetricDelta"] > div, [data-theme="dark"] [data-testid="stMetricDelta"] span {
+            color: #34d399 !important;
+        }
+        [data-theme="dark"] div[data-testid="stSelectbox"] > div, 
+        [data-theme="dark"] div[data-testid="stTextInput"] > div,
+        [data-theme="dark"] div[data-testid="stTextArea"] > div {
+            background-color: #1e2430 !important;
+            color: #f8fafc !important;
+            border: 1px solid rgba(255, 255, 255, 0.25) !important;
+        }
+        [data-theme="dark"] div[data-testid="stExpander"], [data-theme="dark"] div[data-testid="stNotification"] {
+            background-color: #1e2430 !important;
+            border: 1px solid rgba(255, 255, 255, 0.18) !important;
+            color: #f8fafc !important;
+        }
+        [data-theme="dark"] .sticky-footer {
+            background-color: #0e1117 !important;
+            color: #f8fafc !important;
+            border-top: 1px solid rgba(255, 255, 255, 0.18) !important;
+        }
+        [data-theme="dark"] .brand-name {
+            color: #f8fafc !important;
+        }
+        [data-theme="dark"] div[data-testid="stPlotlyChart"] .js-plotly-plot .slice path,
+        [data-theme="dark"] div[data-testid="stPlotlyChart"] .js-plotly-plot path.surface {
+            stroke: #0e1117 !important;
+        }
         .footer-content-inner {
             display: flex;
             align-items: center;
@@ -368,7 +466,38 @@ def apply_custom_styles():
             }
         }
         </style>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
+    
+    # Active theme synchronization helper
+    import streamlit.components.v1 as components
+    components.html(
+        """
+        <script>
+        function syncTheme() {
+            try {
+                const doc = window.parent.document;
+                const app = doc.querySelector('.stApp');
+                if (app) {
+                    const bg = window.parent.getComputedStyle(app).backgroundColor;
+                    const m = bg.match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/);
+                    if (m) {
+                        const lum = (0.299 * parseInt(m[1]) + 0.587 * parseInt(m[2]) + 0.114 * parseInt(m[3])) / 255;
+                        const theme = lum < 0.5 ? 'dark' : 'light';
+                        if (doc.documentElement.getAttribute('data-theme') !== theme) {
+                            doc.documentElement.setAttribute('data-theme', theme);
+                            app.setAttribute('data-theme', theme);
+                        }
+                    }
+                }
+            } catch(e) {}
+        }
+        syncTheme();
+        setInterval(syncTheme, 800);
+        </script>
+        """,
+        height=0,
+        width=0
+    )
 
 # --- Business Logic & Data Processing ---
 
@@ -660,21 +789,26 @@ def render_sidebar(logo_b64=None):
         if logo_b64:
             st.markdown(
                 f"""
-                <div style="text-align: center; margin-bottom: 12px;">
-                    <img src="data:image/png;base64,{logo_b64}" width="150" style="filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1));">
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                    <img src="data:image/png;base64,{logo_b64}" width="42" height="42" style="object-fit: contain; border-radius: 8px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15)); flex-shrink: 0;">
+                    <div style="display: flex; flex-direction: column; justify-content: center;">
+                        <h2 style="margin: 0; font-size: 1.3rem; font-weight: 800; letter-spacing: -0.3px; line-height: 1.15;">DEEN Commerce</h2>
+                        <div style="margin-top: 3px; font-size: 0.8rem; opacity: 0.8; font-weight: 500; line-height: 1.1;">Daily Sales Report</div>
+                    </div>
                 </div>
                 """,
                 unsafe_allow_html=True
             )
-        st.markdown(
-            """
-            <div style="text-align: center; margin-bottom: 12px;">
-                <h2 style="margin: 0; font-size: 1.45rem; font-weight: 700; letter-spacing: -0.3px;">Deen Commerce</h2>
-                <div style="margin-top: 4px; font-size: 0.85rem; opacity: 0.75; font-weight: 500;">Daily Sales Report</div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+        else:
+            st.markdown(
+                """
+                <div style="margin-bottom: 8px;">
+                    <h2 style="margin: 0; font-size: 1.3rem; font-weight: 800; letter-spacing: -0.3px; line-height: 1.15;">DEEN Commerce</h2>
+                    <div style="margin-top: 3px; font-size: 0.8rem; opacity: 0.8; font-weight: 500; line-height: 1.1;">Daily Sales Report</div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
         st.divider()
 
         with st.expander(":material/tune: Category Rule Manager", expanded=False):
